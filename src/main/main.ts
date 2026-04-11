@@ -6,7 +6,8 @@ import {
   nativeImage,
   ipcMain,
   shell,
-  Notification
+  Notification,
+  screen
 } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
@@ -65,15 +66,52 @@ function updateTrayTitle(usage: UsageData, settings: Settings): void {
   tray.setTitle(parts.length > 0 ? parts.join(' ') : '--')
 }
 
+// ---- Display Helper ----
+
+/** カーソルがあるディスプレイの bounds を返す */
+function getActiveDisplayBounds(): Electron.Rectangle {
+  const point = screen.getCursorScreenPoint()
+  return screen.getDisplayNearestPoint(point).workArea
+}
+
+/** ウィンドウをアクティブディスプレイの中央に配置する座標を計算 */
+function centerOnActiveDisplay(winWidth: number, winHeight: number): { x: number; y: number } {
+  const { x, y, width, height } = getActiveDisplayBounds()
+  return {
+    x: Math.round(x + (width - winWidth) / 2),
+    y: Math.round(y + (height - winHeight) / 2)
+  }
+}
+
 // ---- Detail Window ----
 
 function createDetailWindow(): BrowserWindow {
   const settings = loadSettings()
+  const winWidth = 360
+  const winHeight = 580
+
+  // 保存済み位置があればそれを使い、なければアクティブディスプレイ中央
+  let { x, y } = settings.window.x != null && settings.window.y != null
+    ? { x: settings.window.x, y: settings.window.y }
+    : centerOnActiveDisplay(winWidth, winHeight)
+
+  // 保存済み位置が別ディスプレイに存在する場合も考慮して bounds チェック
+  const displays = screen.getAllDisplays()
+  const onSomeDisplay = displays.some(d => {
+    const b = d.workArea
+    return x >= b.x && x < b.x + b.width && y >= b.y && y < b.y + b.height
+  })
+  if (!onSomeDisplay) {
+    const pos = centerOnActiveDisplay(winWidth, winHeight)
+    x = pos.x
+    y = pos.y
+  }
+
   const win = new BrowserWindow({
-    width: 360,
-    height: 580,
-    x: settings.window.x ?? undefined,
-    y: settings.window.y ?? undefined,
+    width: winWidth,
+    height: winHeight,
+    x,
+    y,
     frame: false,
     transparent: true,
     alwaysOnTop: settings.window.alwaysOnTop,
@@ -132,10 +170,17 @@ function openSettingsWindow(): void {
     return
   }
 
+  const sw = 480
+  const sh = 560
+  const { x: sx, y: sy } = centerOnActiveDisplay(sw, sh)
+
   settingsWindow = new BrowserWindow({
-    width: 480,
-    height: 520,
+    width: sw,
+    height: sh,
+    x: sx,
+    y: sy,
     title: 'Settings',
+    backgroundColor: '#1a1a1f',  // ロード前の白フラッシュ防止
     webPreferences: {
       preload: join(__dirname, '../preload/preload.js'),
       contextIsolation: true,

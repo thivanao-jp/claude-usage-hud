@@ -40,7 +40,8 @@ export function SettingsView() {
   return (
     <div style={{
       background: '#1a1a1f',
-      minHeight: '100vh',
+      height: '100vh',
+      overflowY: 'auto',
       padding: 20,
       color: '#e8e8e8'
     }}>
