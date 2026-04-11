@@ -89,8 +89,8 @@ function createDetailWindow(): BrowserWindow {
 
   win.setOpacity(settings.window.opacity / 100)
 
-  if (is.dev) {
-    win.loadURL('http://localhost:5173')
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
@@ -143,10 +143,11 @@ function openSettingsWindow(): void {
     }
   })
 
-  const url = is.dev
-    ? 'http://localhost:5173/#/settings'
-    : `file://${join(__dirname, '../renderer/index.html')}#/settings`
-  settingsWindow.loadURL(url)
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    settingsWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/settings`)
+  } else {
+    settingsWindow.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'settings' })
+  }
 
   settingsWindow.on('closed', () => {
     settingsWindow = null
@@ -235,12 +236,26 @@ ipcMain.handle('open-external', (_e, url: string) => {
 
 // ---- App Lifecycle ----
 
-app.whenReady().then(() => {
-  app.dock?.hide() // macOS: ドックに表示しない
-  createTray()
-  scheduleUpdates()
-})
+// 多重起動防止
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    // 2つ目の起動試行があったら既存のウィンドウを前面に出す
+    if (detailWindow && !detailWindow.isDestroyed()) {
+      detailWindow.show()
+      detailWindow.focus()
+    }
+  })
 
-app.on('window-all-closed', (e) => {
-  e.preventDefault() // トレイアプリなのでウィンドウが全部閉じても終了しない
-})
+  app.whenReady().then(() => {
+    app.dock?.hide() // macOS: ドックに表示しない
+    createTray()
+    scheduleUpdates()
+  })
+
+  app.on('window-all-closed', (e) => {
+    e.preventDefault() // トレイアプリなのでウィンドウが全部閉じても終了しない
+  })
+}
