@@ -2,9 +2,12 @@ import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 
+export type ViewMode = 'compact' | 'detail'
+
 export interface Settings {
   token: string
   updateIntervalMinutes: number
+  viewMode: ViewMode          // 最後に表示したモード
   tray: {
     show5h: boolean
     show7d: boolean
@@ -28,6 +31,7 @@ export interface Settings {
 const defaultSettings: Settings = {
   token: '',
   updateIntervalMinutes: 5,
+  viewMode: 'compact',
   tray: {
     show5h: true,
     show7d: true,

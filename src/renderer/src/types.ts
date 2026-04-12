@@ -23,9 +23,12 @@ export interface ProfileData {
   }
 }
 
+export type ViewMode = 'compact' | 'detail'
+
 export interface Settings {
   token: string
   updateIntervalMinutes: number
+  viewMode: ViewMode
   tray: {
     show5h: boolean
     show7d: boolean
@@ -61,12 +64,14 @@ declare global {
       getHistory: (days: number) => Promise<HistoryRow[]>
       getSettings: () => Promise<Settings>
       saveSettings: (s: Settings) => Promise<void>
+      setViewMode: (mode: string) => Promise<void>
       refresh: () => Promise<void>
       openSettings: () => Promise<void>
-      closeDetail: () => Promise<void>
+      closeHud: () => Promise<void>
       autoDetectToken: () => Promise<string | null>
       openExternal: (url: string) => Promise<void>
       onUsageUpdate: (cb: (data: { usage: UsageData; profile: ProfileData }) => void) => () => void
+      onModeChanged: (cb: (mode: string) => void) => () => void
     }
   }
 }

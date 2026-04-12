@@ -11,112 +11,87 @@ import {
 } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
-import { loadSettings, saveSettings, Settings } from './settings'
+import { loadSettings, saveSettings, Settings, ViewMode } from './settings'
 import { fetchUsage, fetchProfile, UsageData, ProfileData } from './claudeApi'
 import { saveUsageHistory, getUsageHistory } from './db'
 import { getTokenFromCredentials } from './credentials'
 
 let tray: Tray | null = null
-let detailWindow: BrowserWindow | null = null
+let hudWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
 let updateTimer: ReturnType<typeof setInterval> | null = null
 let lastUsage: UsageData | null = null
 let lastProfile: ProfileData | null = null
 
-// ---- Tray ----
-
-function createTray(): void {
-  const iconPath = join(__dirname, '../../resources/tray-icon.png')
-  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
-  tray = new Tray(icon)
-  tray.setTitle('--')
-  tray.setToolTip('Claude Usage HUD')
-
-  const contextMenu = Menu.buildFromTemplate([
-    { label: 'Show / Hide Detail', click: () => toggleDetailWindow() },
-    { label: 'Settings', click: () => openSettingsWindow() },
-    { type: 'separator' },
-    { label: 'Refresh Now', click: () => doUpdate() },
-    { type: 'separator' },
-    { label: 'Quit', click: () => app.quit() }
-  ])
-
-  // macOS ではleft-clickもright-clickもメニューを出す（clickイベントが来ないことがある）
-  tray.on('click', () => toggleDetailWindow())
-  tray.on('right-click', () => tray!.popUpContextMenu(contextMenu))
-}
-
-function updateTrayTitle(usage: UsageData, settings: Settings): void {
-  if (!tray) return
-
-  const parts: string[] = []
-  if (settings.tray.show5h && usage.five_hour) {
-    parts.push(`5h:${Math.round(usage.five_hour.utilization)}%`)
-  }
-  if (settings.tray.show7d && usage.seven_day) {
-    parts.push(`7d:${Math.round(usage.seven_day.utilization)}%`)
-  }
-  if (settings.tray.showOauth && usage.seven_day_oauth_apps) {
-    parts.push(`oa:${Math.round(usage.seven_day_oauth_apps.utilization)}%`)
-  }
-  if (settings.tray.showOpus && usage.seven_day_opus) {
-    parts.push(`op:${Math.round(usage.seven_day_opus.utilization)}%`)
-  }
-
-  tray.setTitle(parts.length > 0 ? parts.join(' ') : '--')
-}
-
 // ---- Display Helper ----
 
-/** カーソルがあるディスプレイの bounds を返す */
 function getActiveDisplayBounds(): Electron.Rectangle {
   const point = screen.getCursorScreenPoint()
   return screen.getDisplayNearestPoint(point).workArea
 }
 
-/** ウィンドウをアクティブディスプレイの中央に配置する座標を計算 */
-function centerOnActiveDisplay(winWidth: number, winHeight: number): { x: number; y: number } {
+function centerOnActiveDisplay(w: number, h: number): { x: number; y: number } {
   const { x, y, width, height } = getActiveDisplayBounds()
   return {
-    x: Math.round(x + (width - winWidth) / 2),
-    y: Math.round(y + (height - winHeight) / 2)
+    x: Math.round(x + (width - w) / 2),
+    y: Math.round(y + (height - h) / 2)
   }
 }
 
-// ---- Detail Window ----
-
-function createDetailWindow(): BrowserWindow {
-  const settings = loadSettings()
-  const winWidth = 360
-  const winHeight = 580
-
-  // 保存済み位置があればそれを使い、なければアクティブディスプレイ中央
-  let { x, y } = settings.window.x != null && settings.window.y != null
-    ? { x: settings.window.x, y: settings.window.y }
-    : centerOnActiveDisplay(winWidth, winHeight)
-
-  // 保存済み位置が別ディスプレイに存在する場合も考慮して bounds チェック
-  const displays = screen.getAllDisplays()
-  const onSomeDisplay = displays.some(d => {
+function isPositionOnSomeDisplay(x: number, y: number): boolean {
+  return screen.getAllDisplays().some(d => {
     const b = d.workArea
     return x >= b.x && x < b.x + b.width && y >= b.y && y < b.y + b.height
   })
-  if (!onSomeDisplay) {
-    const pos = centerOnActiveDisplay(winWidth, winHeight)
-    x = pos.x
-    y = pos.y
-  }
+}
+
+// ---- Window Size ----
+
+const DETAIL_W = 360
+const DETAIL_H = 580
+const COMPACT_W = 320
+const COMPACT_BAR_H = 42   // 1本のバーの高さ
+const COMPACT_BTN_H = 28   // ボタン行の高さ
+const COMPACT_PAD = 8      // 上下パディング合計
+
+function getCompactHeight(settings: Settings): number {
+  const count = [
+    settings.tray.show5h,
+    settings.tray.show7d,
+    settings.tray.showOauth,
+    settings.tray.showOpus
+  ].filter(Boolean).length || 1
+  return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD
+}
+
+function getWindowSize(mode: ViewMode, settings: Settings): { w: number; h: number } {
+  return mode === 'compact'
+    ? { w: COMPACT_W, h: getCompactHeight(settings) }
+    : { w: DETAIL_W, h: DETAIL_H }
+}
+
+// ---- HUD Window ----
+
+function createHudWindow(): BrowserWindow {
+  const settings = loadSettings()
+  const { w, h } = getWindowSize(settings.viewMode, settings)
+
+  let { x, y } =
+    settings.window.x != null && settings.window.y != null &&
+    isPositionOnSomeDisplay(settings.window.x, settings.window.y)
+      ? { x: settings.window.x, y: settings.window.y }
+      : centerOnActiveDisplay(w, h)
 
   const win = new BrowserWindow({
-    width: winWidth,
-    height: winHeight,
+    width: w,
+    height: h,
     x,
     y,
     frame: false,
     transparent: true,
     alwaysOnTop: settings.window.alwaysOnTop,
     skipTaskbar: true,
-    resizable: true,
+    resizable: false,
     hasShadow: false,
     webPreferences: {
       preload: join(__dirname, '../preload/preload.js'),
@@ -134,53 +109,98 @@ function createDetailWindow(): BrowserWindow {
   }
 
   win.on('moved', () => {
-    const [x, y] = win.getPosition()
+    const [px, py] = win.getPosition()
     const s = loadSettings()
-    s.window.x = x
-    s.window.y = y
+    s.window.x = px
+    s.window.y = py
     saveSettings(s)
   })
 
-  win.on('closed', () => {
-    detailWindow = null
-  })
+  win.on('closed', () => { hudWindow = null })
 
   return win
 }
 
-function toggleDetailWindow(): void {
-  if (detailWindow) {
-    if (detailWindow.isVisible()) {
-      detailWindow.hide()
+function toggleHudWindow(): void {
+  if (hudWindow) {
+    if (hudWindow.isVisible()) {
+      hudWindow.hide()
     } else {
-      detailWindow.show()
-      detailWindow.focus()
+      hudWindow.show()
+      hudWindow.focus()
     }
   } else {
-    detailWindow = createDetailWindow()
-    detailWindow.show()
+    hudWindow = createHudWindow()
+    hudWindow.show()
   }
+}
+
+/** モード切り替え: ウィンドウのリサイズ + レンダラーへ通知 */
+function switchViewMode(mode: ViewMode): void {
+  const s = loadSettings()
+  s.viewMode = mode
+  saveSettings(s)
+
+  if (!hudWindow || hudWindow.isDestroyed()) return
+  const { w, h } = getWindowSize(mode, s)
+  hudWindow.setSize(w, h)
+  hudWindow.webContents.send('mode-changed', mode)
+}
+
+// ---- Tray ----
+
+function createTray(): void {
+  const iconPath = join(__dirname, '../../resources/tray-icon.png')
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
+  tray = new Tray(icon)
+  tray.setTitle('--')
+  tray.setToolTip('Claude Usage HUD')
+
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Show / Hide', click: () => toggleHudWindow() },
+    { label: 'Compact', click: () => switchViewMode('compact') },
+    { label: 'Detail', click: () => switchViewMode('detail') },
+    { label: 'Settings', click: () => openSettingsWindow() },
+    { type: 'separator' },
+    { label: 'Refresh Now', click: () => doUpdate() },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() }
+  ])
+
+  tray.on('click', () => toggleHudWindow())
+  tray.on('right-click', () => tray!.popUpContextMenu(contextMenu))
+}
+
+function updateTrayTitle(usage: UsageData, settings: Settings): void {
+  if (!tray) return
+  const parts: string[] = []
+  if (settings.tray.show5h && usage.five_hour)
+    parts.push(`5h:${Math.round(usage.five_hour.utilization)}%`)
+  if (settings.tray.show7d && usage.seven_day)
+    parts.push(`7d:${Math.round(usage.seven_day.utilization)}%`)
+  if (settings.tray.showOauth && usage.seven_day_oauth_apps)
+    parts.push(`oa:${Math.round(usage.seven_day_oauth_apps.utilization)}%`)
+  if (settings.tray.showOpus && usage.seven_day_opus)
+    parts.push(`op:${Math.round(usage.seven_day_opus.utilization)}%`)
+  tray.setTitle(parts.length > 0 ? parts.join(' ') : '--')
 }
 
 // ---- Settings Window ----
 
 function openSettingsWindow(): void {
-  if (settingsWindow) {
-    settingsWindow.focus()
-    return
-  }
+  if (settingsWindow) { settingsWindow.focus(); return }
 
   const sw = 480
   const sh = 560
-  const { x: sx, y: sy } = centerOnActiveDisplay(sw, sh)
+  const { x, y } = centerOnActiveDisplay(sw, sh)
 
   settingsWindow = new BrowserWindow({
     width: sw,
     height: sh,
-    x: sx,
-    y: sy,
+    x,
+    y,
     title: 'Settings',
-    backgroundColor: '#1a1a1f',  // ロード前の白フラッシュ防止
+    backgroundColor: '#1a1a1f',
     webPreferences: {
       preload: join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
@@ -194,9 +214,7 @@ function openSettingsWindow(): void {
     settingsWindow.loadFile(join(__dirname, '../renderer/index.html'), { hash: '/settings' })
   }
 
-  settingsWindow.on('closed', () => {
-    settingsWindow = null
-  })
+  settingsWindow.on('closed', () => { settingsWindow = null })
 }
 
 // ---- Data Update ----
@@ -217,8 +235,8 @@ async function doUpdate(): Promise<void> {
     updateTrayTitle(usage, settings)
     checkAlerts(usage, settings)
 
-    if (detailWindow && !detailWindow.isDestroyed()) {
-      detailWindow.webContents.send('usage-update', { usage, profile })
+    if (hudWindow && !hudWindow.isDestroyed()) {
+      hudWindow.webContents.send('usage-update', { usage, profile })
     }
   } catch (err) {
     console.error('Update failed:', err)
@@ -243,7 +261,6 @@ function checkAlerts(usage: UsageData, settings: Settings): void {
     { key: 'seven_day_oauth_apps', label: '7-day OAuth Apps' },
     { key: 'seven_day_opus', label: '7-day Opus' }
   ]
-
   for (const { key, label } of checks) {
     const entry = usage[key]
     const threshold = settings.alerts?.[key]
@@ -264,43 +281,42 @@ ipcMain.handle('get-settings', () => loadSettings())
 ipcMain.handle('save-settings', (_e, settings: Settings) => {
   saveSettings(settings)
   scheduleUpdates()
-  if (detailWindow && !detailWindow.isDestroyed()) {
+  if (hudWindow && !hudWindow.isDestroyed()) {
     const s = loadSettings()
-    detailWindow.setAlwaysOnTop(s.window.alwaysOnTop)
-    detailWindow.setOpacity(s.window.opacity / 100)
+    hudWindow.setAlwaysOnTop(s.window.alwaysOnTop)
+    hudWindow.setOpacity(s.window.opacity / 100)
+    // コンパクト表示のバー数が変わった場合リサイズ
+    if (s.viewMode === 'compact') {
+      const { w, h } = getWindowSize('compact', s)
+      hudWindow.setSize(w, h)
+    }
   }
 })
+ipcMain.handle('set-view-mode', (_e, mode: ViewMode) => switchViewMode(mode))
 ipcMain.handle('refresh', () => doUpdate())
 ipcMain.handle('open-settings', () => openSettingsWindow())
-ipcMain.handle('close-detail', () => detailWindow?.hide())
+ipcMain.handle('close-hud', () => hudWindow?.hide())
 ipcMain.handle('auto-detect-token', () => getTokenFromCredentials())
-
-ipcMain.handle('open-external', (_e, url: string) => {
-  shell.openExternal(url)
-})
+ipcMain.handle('open-external', (_e, url: string) => shell.openExternal(url))
 
 // ---- App Lifecycle ----
 
-// 多重起動防止
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
 } else {
   app.on('second-instance', () => {
-    // 2つ目の起動試行があったら既存のウィンドウを前面に出す
-    if (detailWindow && !detailWindow.isDestroyed()) {
-      detailWindow.show()
-      detailWindow.focus()
+    if (hudWindow && !hudWindow.isDestroyed()) {
+      hudWindow.show()
+      hudWindow.focus()
     }
   })
 
   app.whenReady().then(() => {
-    app.dock?.hide() // macOS: ドックに表示しない
+    app.dock?.hide()
     createTray()
     scheduleUpdates()
   })
 
-  app.on('window-all-closed', (e) => {
-    e.preventDefault() // トレイアプリなのでウィンドウが全部閉じても終了しない
-  })
+  app.on('window-all-closed', (e) => { e.preventDefault() })
 }
