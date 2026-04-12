@@ -32,18 +32,18 @@ function createTray(): void {
   tray.setTitle('--')
   tray.setToolTip('Claude Usage HUD')
 
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Show / Hide Detail', click: () => toggleDetailWindow() },
+    { label: 'Settings', click: () => openSettingsWindow() },
+    { type: 'separator' },
+    { label: 'Refresh Now', click: () => doUpdate() },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() }
+  ])
+
+  // macOS ではleft-clickもright-clickもメニューを出す（clickイベントが来ないことがある）
   tray.on('click', () => toggleDetailWindow())
-  tray.on('right-click', () => {
-    const menu = Menu.buildFromTemplate([
-      { label: 'Show Detail', click: () => toggleDetailWindow() },
-      { label: 'Settings', click: () => openSettingsWindow() },
-      { type: 'separator' },
-      { label: 'Refresh Now', click: () => doUpdate() },
-      { type: 'separator' },
-      { label: 'Quit', click: () => app.quit() }
-    ])
-    tray!.popUpContextMenu(menu)
-  })
+  tray.on('right-click', () => tray!.popUpContextMenu(contextMenu))
 }
 
 function updateTrayTitle(usage: UsageData, settings: Settings): void {
@@ -191,7 +191,7 @@ function openSettingsWindow(): void {
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     settingsWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/settings`)
   } else {
-    settingsWindow.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'settings' })
+    settingsWindow.loadFile(join(__dirname, '../renderer/index.html'), { hash: '/settings' })
   }
 
   settingsWindow.on('closed', () => {
