@@ -3,6 +3,7 @@ import { UsageData, ProfileData, ExtraUsage } from '../types'
 import { UsageCard } from './UsageCard'
 import { HistoryChart } from './HistoryChart'
 import { useT } from '../LangContext'
+import { useTheme } from '../ThemeContext'
 
 interface Props {
   usage: UsageData | null
@@ -13,16 +14,32 @@ interface Props {
   onRefresh: () => void
 }
 
-function planLabel(p: ProfileData): string {
-  const tier = p.organization?.rate_limit_tier ?? ''
-  if (tier.includes('5x')) return 'Max 5x'
-  if (tier.includes('max') || p.account?.has_claude_max) return 'Max'
+function planLabel(p: ProfileData, usage?: UsageData | null): string {
+  const tier = (p.organization?.rate_limit_tier ?? '').toLowerCase()
+
+  // tier 文字列マッチ（大文字小文字・命名規則の違いを吸収）
+  if (tier.includes('5x'))   return 'Max 5x'
+  if (tier.includes('max'))  return 'Max'
+  if (tier.includes('pro'))  return 'Pro'
+  if (tier.includes('free')) return 'Free'
+
+  // API フラグによる判定
+  if (p.account?.has_claude_max) return 'Max'
   if (p.account?.has_claude_pro) return 'Pro'
-  return tier || 'Unknown'
+
+  // 使用量データからの推論（フォールバック）
+  if (usage?.seven_day_oauth_apps) return 'Max'
+  if (usage?.extra_usage?.is_enabled) return 'Pro+'
+  if (usage?.seven_day) return 'Pro'
+
+  // 生の tier 文字列を短縮して表示（空なら ? ）
+  const raw = p.organization?.rate_limit_tier ?? ''
+  return raw ? raw.split('_').slice(0, 2).join(' ') : '?'
 }
 
 export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToCompact, onRefresh }: Props) {
   const t = useT()
+  const th = useTheme()
   const [showChart, setShowChart] = useState(false)
   const [chartDays, setChartDays] = useState(7)
 
@@ -38,9 +55,9 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
 
   return (
     <div style={{
-      background: 'rgba(18,18,22,0.93)',
+      background: th.bg,
       borderRadius: 12,
-      border: '1px solid rgba(255,255,255,0.08)',
+      border: `1px solid ${th.border}`,
       overflow: 'hidden',
       minWidth: 320,
       userSelect: 'none',
@@ -51,11 +68,11 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '8px 12px 6px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: `1px solid ${th.borderSection}`,
         WebkitAppRegion: 'drag' as any,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#ccc' }}>Claude Usage HUD</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: th.textSub }}>Claude Usage HUD</span>
           {profile && (
             <span style={{
               background: '#e05a2b22',
@@ -66,20 +83,20 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
               fontSize: 11,
               fontWeight: 600,
             }}>
-              {planLabel(profile)}
+              {planLabel(profile, usage)}
             </span>
           )}
         </div>
         <div style={{ display: 'flex', gap: 6, WebkitAppRegion: 'no-drag' as any }}>
-          <button onClick={onRefresh}          title={t('refresh')}     style={iconBtn}>↻</button>
-          <button onClick={onSwitchToCompact}  title={t('compactView')} style={iconBtn}>⊟</button>
-          <button onClick={() => window.api.openSettings()} title={t('settings')} style={iconBtn}>⚙</button>
+          <button onClick={onRefresh}          title={t('refresh')}     style={iconBtn(th.iconBtn)}>↻</button>
+          <button onClick={onSwitchToCompact}  title={t('compactView')} style={iconBtn(th.iconBtn)}>⊟</button>
+          <button onClick={() => window.api.openSettings()} title={t('settings')} style={iconBtn(th.iconBtn)}>⚙</button>
         </div>
       </div>
 
       {/* Profile */}
       {profile && (
-        <div style={{ padding: '6px 14px 2px', fontSize: 11, color: '#888' }}>
+        <div style={{ padding: '6px 14px 2px', fontSize: 11, color: th.textMuted }}>
           {profile.account?.email}
           {profile.organization?.name ? ` · ${profile.organization.name}` : ''}
         </div>
@@ -106,17 +123,17 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
             )}
           </>
         ) : (
-          <div style={{ color: '#555', textAlign: 'center', padding: '20px 0', fontSize: 12 }}>
+          <div style={{ color: th.textFaint, textAlign: 'center', padding: '20px 0', fontSize: 12 }}>
             {t('loading')}
           </div>
         )}
       </div>
 
       {/* History */}
-      <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '6px 12px' }}>
+      <div style={{ borderTop: `1px solid ${th.borderSection}`, padding: '6px 12px' }}>
         <button
           onClick={() => setShowChart(!showChart)}
-          style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: 12, padding: 0 }}
+          style={{ background: 'none', border: 'none', color: th.textMuted, cursor: 'pointer', fontSize: 12, padding: 0 }}
         >
           {showChart ? '▲' : '▼'} {t('usageHistory')}
         </button>
@@ -128,9 +145,9 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
                   key={d}
                   onClick={() => setChartDays(d)}
                   style={{
-                    background: chartDays === d ? '#333' : 'none',
-                    border: '1px solid #333',
-                    color: chartDays === d ? '#e8e8e8' : '#888',
+                    background: chartDays === d ? th.bgSelected : 'none',
+                    border: `1px solid ${th.borderInput}`,
+                    color: chartDays === d ? th.text : th.textMuted,
                     borderRadius: 4,
                     padding: '2px 8px',
                     fontSize: 11,
@@ -155,7 +172,7 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
               : t('unknown'))}
           </span>
         ) : (
-          <span style={{ color: '#888' }}>
+          <span style={{ color: th.textMuted }}>
             {t('updated', formatAge(lastSuccessAt))}
           </span>
         )}
@@ -166,44 +183,47 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
 
 function ExtraUsageCard({ extra }: { extra: ExtraUsage }) {
   const t = useT()
+  const th = useTheme()
   const pct = Math.min(Math.round(extra.utilization), 100)
   const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : '#a78bfa'
 
   return (
     <div style={{
-      background: 'rgba(167,139,250,0.06)',
-      border: '1px solid rgba(167,139,250,0.2)',
+      background: th.bgCardExtra,
+      border: `1px solid ${th.borderCardExtra}`,
       borderRadius: 8,
       padding: '8px 10px',
       marginBottom: 6
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#ccc' }}>{t('labelExtra')}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: th.textSub }}>{t('labelExtra')}</span>
         <span style={{ fontSize: 16, fontWeight: 700, color: barColor }}>{pct}%</span>
       </div>
       <div style={{
-        background: 'rgba(255,255,255,0.08)', borderRadius: 3, height: 5, marginBottom: 6, overflow: 'hidden'
+        background: th.bgBar, borderRadius: 3, height: 5, marginBottom: 6, overflow: 'hidden'
       }}>
         <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 3, transition: 'width 0.4s ease' }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-        <span style={{ color: '#888' }}>
+        <span style={{ color: th.textMuted }}>
           {extra.used_credits.toLocaleString()} / {extra.monthly_limit.toLocaleString()} {t('creditsUnit')}
         </span>
-        <span style={{ color: '#888' }}>{t('monthlyReset')}</span>
+        <span style={{ color: th.textMuted }}>{t('monthlyReset')}</span>
       </div>
-      <div style={{ fontSize: 10, color: '#777', marginTop: 3 }}>{t('descExtra')}</div>
+      <div style={{ fontSize: 10, color: th.textDesc, marginTop: 3 }}>{t('descExtra')}</div>
     </div>
   )
 }
 
-const iconBtn: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  color: '#555',
-  cursor: 'pointer',
-  fontSize: 14,
-  padding: '2px 4px',
-  borderRadius: 4,
-  lineHeight: 1,
+function iconBtn(color: string): React.CSSProperties {
+  return {
+    background: 'none',
+    border: 'none',
+    color,
+    cursor: 'pointer',
+    fontSize: 14,
+    padding: '2px 4px',
+    borderRadius: 4,
+    lineHeight: 1,
+  }
 }

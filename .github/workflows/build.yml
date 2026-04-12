@@ -1,0 +1,94 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build macOS distributable
+        run: npm run dist:mac
+        env:
+          # コード署名をスキップ（未署名ビルド）
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-mac
+          path: |
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+
+  build-win:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows distributable
+        run: npm run dist:win
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-win
+          path: |
+            dist/*.exe
+            dist/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: [build-mac, build-win]
+    runs-on: ubuntu-latest
+    # タグプッシュ時のみ Release を作成
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-mac
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-win
+          path: dist
+
+      - name: List artifacts
+        run: ls -lh dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}

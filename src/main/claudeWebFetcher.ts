@@ -290,18 +290,39 @@ function mapProfile(rawAccount: unknown, orgUuid: string): ProfileData | null {
   const memberships = Array.isArray(a['memberships']) ? a['memberships'] : []
   const membership = (memberships[0] ?? {}) as Record<string, unknown>
   const org = (membership['organization'] ?? {}) as Record<string, unknown>
+  const settings = (typeof a['settings'] === 'object' && a['settings'] ? a['settings'] : {}) as Record<string, unknown>
+  const capabilities = (typeof a['capabilities'] === 'object' && a['capabilities'] ? a['capabilities'] : {}) as Record<string, unknown>
+
+  // rate_limit_tier はトップレベル・ネストされた org・settings など複数箇所を探す
+  const rate_limit_tier = String(
+    a['rate_limit_tier'] ??
+    org['rate_limit_tier'] ??
+    settings['rate_limit_tier'] ??
+    capabilities['rate_limit_tier'] ??
+    ''
+  )
+
+  // プランフラグも複数箇所から取得
+  const has_claude_max = Boolean(
+    a['has_claude_max'] ?? org['has_claude_max'] ??
+    settings['has_claude_max'] ?? capabilities['has_claude_max']
+  )
+  const has_claude_pro = Boolean(
+    a['has_claude_pro'] ?? org['has_claude_pro'] ??
+    settings['has_claude_pro'] ?? capabilities['has_claude_pro']
+  )
 
   return {
     account: {
       display_name: String(a['name'] ?? a['display_name'] ?? ''),
       email: String(a['email'] ?? ''),
-      has_claude_max: Boolean(a['has_claude_max']),
-      has_claude_pro: Boolean(a['has_claude_pro']),
+      has_claude_max,
+      has_claude_pro,
     },
     organization: {
-      uuid: String(org['uuid'] ?? orgUuid ?? ''),
-      name: String(org['name'] ?? ''),
-      rate_limit_tier: String(org['rate_limit_tier'] ?? ''),
+      uuid: String(a['uuid'] ?? org['uuid'] ?? orgUuid ?? ''),
+      name: String(a['name'] ?? org['name'] ?? ''),
+      rate_limit_tier,
     }
   }
 }

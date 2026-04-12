@@ -1,5 +1,6 @@
-import { UsageData, Settings } from '../types'
+import { UsageData, Settings, ExtraUsage } from '../types'
 import { useT } from '../LangContext'
+import { useTheme } from '../ThemeContext'
 
 interface Props {
   usage: UsageData | null
@@ -60,6 +61,7 @@ function formatUpdatedAt(d: Date | null): string {
 
 export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchToDetail, onRefresh }: Props) {
   const t = useT()
+  const th = useTheme()
 
   const visibleBars = BAR_ITEMS.filter(item => {
     if (item.key === 'five_hour')            return settings.tray.show5h
@@ -68,13 +70,27 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
     if (item.key === 'seven_day_opus')       return settings.tray.showOpus
     return false
   })
-  const bars = visibleBars.length > 0 ? visibleBars : BAR_ITEMS
+  const showExtraBar = settings.tray.showExtra
+  const bars = visibleBars.length > 0 || showExtraBar ? visibleBars : BAR_ITEMS
+
+  const barTextStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    padding: '0 8px',
+    fontSize: 11,
+    fontWeight: 600,
+    color: th.barText,
+    mixBlendMode: th.barTextBlend as any,
+    gap: 0,
+  }
 
   return (
     <div style={{
-      background: 'rgba(18,18,22,0.93)',
+      background: th.bg,
       borderRadius: 8,
-      border: '1px solid rgba(255,255,255,0.08)',
+      border: `1px solid ${th.border}`,
       overflow: 'hidden',
       userSelect: 'none',
       WebkitAppRegion: 'drag' as any,
@@ -90,7 +106,7 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
       }}>
         <div style={{
           fontSize: 10,
-          color: isStale ? '#e0a12b' : '#888',
+          color: isStale ? '#e0a12b' : th.textMuted,
           WebkitAppRegion: 'drag' as any,
         }}>
           {isStale
@@ -98,8 +114,8 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
             : lastSuccessAt ? formatUpdatedAt(lastSuccessAt) : ''}
         </div>
         <div style={{ display: 'flex', gap: 4, WebkitAppRegion: 'no-drag' as any }}>
-          <button onClick={onRefresh}        title={t('refresh')}    style={iconBtnStyle}>↻</button>
-          <button onClick={onSwitchToDetail} title={t('detailView')} style={iconBtnStyle}>⊞</button>
+          <button onClick={onRefresh}        title={t('refresh')}    style={iconBtnStyle(th.iconBtn)}>↻</button>
+          <button onClick={onSwitchToDetail} title={t('detailView')} style={iconBtnStyle(th.iconBtn)}>⊞</button>
         </div>
       </div>
 
@@ -107,9 +123,9 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
       <div style={{ padding: '0 4px 4px' }}>
         {bars.map(item => {
           const entry = usage?.[item.key]
-          const pct      = entry ? Math.min(Math.round(entry.utilization), 100) : 0
+          const pct      = entry ? Math.min(Math.round((entry as any).utilization), 100) : 0
           const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : item.color
-          const { date, time, rel } = formatReset(entry?.resets_at ?? null, t('timeNow'))
+          const { date, time, rel } = formatReset((entry as any)?.resets_at ?? null, t('timeNow'))
 
           return (
             <div
@@ -120,7 +136,7 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
                 borderRadius: 4,
                 overflow: 'hidden',
                 marginBottom: 4,
-                background: 'rgba(255,255,255,0.06)',
+                background: th.bgBar,
                 WebkitAppRegion: 'drag' as any,
               }}
             >
@@ -132,18 +148,7 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
                 borderRadius: 4,
                 transition: 'width 0.4s ease',
               }} />
-              <div style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                padding: '0 8px',
-                fontSize: 11,
-                fontWeight: 600,
-                color: '#ffffff',
-                mixBlendMode: 'difference',
-                gap: 0,
-              }}>
+              <div style={barTextStyle}>
                 <span style={{ width: 30, flexShrink: 0 }}>{item.label}</span>
                 <span style={{ width: 72, flexShrink: 0 }}>{date}</span>
                 <span style={{ width: 44, flexShrink: 0 }}>{time}</span>
@@ -154,19 +159,59 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
             </div>
           )
         })}
+
+        {/* Extra usage bar */}
+        {showExtraBar && (() => {
+          const extra: ExtraUsage | null = usage?.extra_usage ?? null
+          const pct = extra ? Math.min(Math.round(extra.utilization), 100) : 0
+          const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : '#a78bfa'
+          const creditsText = extra
+            ? `${extra.used_credits.toLocaleString()}/${extra.monthly_limit.toLocaleString()}cr`
+            : '—'
+
+          return (
+            <div
+              style={{
+                position: 'relative',
+                height: 34,
+                borderRadius: 4,
+                overflow: 'hidden',
+                marginBottom: 4,
+                background: th.bgBar,
+                WebkitAppRegion: 'drag' as any,
+              }}
+            >
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                width: `${pct}%`,
+                background: barColor,
+                borderRadius: 4,
+                transition: 'width 0.4s ease',
+              }} />
+              <div style={barTextStyle}>
+                <span style={{ width: 30, flexShrink: 0 }}>EX</span>
+                <span style={{ flex: 1 }}>{creditsText}</span>
+                <span>{pct}%</span>
+              </div>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )
 }
 
-const iconBtnStyle: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  color: '#777',
-  cursor: 'pointer',
-  fontSize: 13,
-  padding: '2px 4px',
-  borderRadius: 3,
-  lineHeight: 1,
-  WebkitAppRegion: 'no-drag' as any,
+function iconBtnStyle(color: string): React.CSSProperties {
+  return {
+    background: 'none',
+    border: 'none',
+    color,
+    cursor: 'pointer',
+    fontSize: 13,
+    padding: '2px 4px',
+    borderRadius: 3,
+    lineHeight: 1,
+    WebkitAppRegion: 'no-drag' as any,
+  }
 }

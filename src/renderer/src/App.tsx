@@ -4,16 +4,35 @@ import { CompactView } from './components/CompactView'
 import { SettingsView } from './components/SettingsView'
 import { UsageData, ProfileData, Settings, ViewMode } from './types'
 import { LangContext, useT } from './LangContext'
+import { ThemeContext } from './ThemeContext'
 import { resolveLang } from './i18n'
+import { ThemeTokens, ThemeSetting, resolveTheme } from './theme'
 
 const defaultSettings: Settings = {
   token: '',
   updateIntervalMinutes: 10,
   viewMode: 'compact',
   language: 'auto',
-  tray: { show5h: true, show7d: true, showOauth: false, showOpus: false },
+  theme: 'auto',
+  tray: { show5h: true, show7d: true, showOauth: false, showOpus: false, showExtra: false },
   window: { opacity: 90, alwaysOnTop: true },
   alerts: {},
+}
+
+function useResolvedTheme(themeSetting: ThemeSetting): ThemeTokens {
+  const [tokens, setTokens] = useState(() => resolveTheme(themeSetting))
+
+  useEffect(() => {
+    setTokens(resolveTheme(themeSetting))
+    if (themeSetting !== 'auto') return
+
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = () => setTokens(resolveTheme('auto'))
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [themeSetting])
+
+  return tokens
 }
 
 function HudApp() {
@@ -82,24 +101,28 @@ export default function App() {
 
   useEffect(() => {
     window.api.getSettings().then(setSettings)
-    // Settings 画面でも言語変更を即時反映
     const unsub = window.api.onSettingsChanged(s => setSettings(s as Settings))
     return unsub
   }, [])
 
   const lang = resolveLang(settings.language ?? 'auto')
+  const theme = useResolvedTheme(settings.theme ?? 'auto')
 
   if (isSettings) {
     return (
       <LangContext.Provider value={lang}>
-        <SettingsView onSettingsChange={setSettings} />
+        <ThemeContext.Provider value={theme}>
+          <SettingsView onSettingsChange={setSettings} />
+        </ThemeContext.Provider>
       </LangContext.Provider>
     )
   }
 
   return (
     <LangContext.Provider value={lang}>
-      <HudApp />
+      <ThemeContext.Provider value={theme}>
+        <HudApp />
+      </ThemeContext.Provider>
     </LangContext.Provider>
   )
 }

@@ -5,21 +5,19 @@ import {
 } from 'recharts'
 import { HistoryRow } from '../types'
 import { useT } from '../LangContext'
+import { useTheme } from '../ThemeContext'
 
 interface Props {
   days: number
 }
 
-/** データの中から日付変わり目（00:00）または 5h リセット境界などのX軸インデックスを返す */
 function buildReferenceLines(data: HistoryRow[]): string[] {
   const lines: string[] = []
   let prevDate = ''
   for (const row of data) {
     const d = new Date(row.recorded_at)
-    // YYYY-MM-DD を日付境界として使う
     const dateStr = d.toLocaleDateString([], { month: 'numeric', day: 'numeric' })
     if (prevDate && dateStr !== prevDate) {
-      // この行の time ラベルを境界として記録
       lines.push(d.toLocaleString([], {
         month: 'numeric', day: 'numeric',
         hour: '2-digit', minute: '2-digit'
@@ -32,6 +30,7 @@ function buildReferenceLines(data: HistoryRow[]): string[] {
 
 export function HistoryChart({ days }: Props) {
   const t = useT()
+  const th = useTheme()
   const [data, setData] = useState<HistoryRow[]>([])
 
   useEffect(() => {
@@ -40,7 +39,7 @@ export function HistoryChart({ days }: Props) {
 
   if (data.length === 0) {
     return (
-      <div style={{ color: '#444', fontSize: 11, textAlign: 'center', padding: '12px 0' }}>
+      <div style={{ color: th.textFaint2, fontSize: 11, textAlign: 'center', padding: '12px 0' }}>
         {t('noHistory')}
       </div>
     )
@@ -63,40 +62,39 @@ export function HistoryChart({ days }: Props) {
   return (
     <ResponsiveContainer width="100%" height={160}>
       <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: -20 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+        <CartesianGrid strokeDasharray="3 3" stroke={th.borderChart} />
         <XAxis
           dataKey="time"
-          tick={{ fontSize: 9, fill: '#555' }}
+          tick={{ fontSize: 9, fill: th.chartTick }}
           interval="preserveStartEnd"
           tickLine={false}
         />
         <YAxis
           domain={[0, 100]}
-          tick={{ fontSize: 9, fill: '#555' }}
+          tick={{ fontSize: 9, fill: th.chartTick }}
           tickLine={false}
           axisLine={false}
         />
         <Tooltip
           contentStyle={{
-            background: 'rgba(20,20,25,0.95)',
-            border: '1px solid rgba(255,255,255,0.1)',
+            background: th.bgChartTooltip,
+            border: `1px solid ${th.borderChartTooltip}`,
             borderRadius: 6,
             fontSize: 11
           }}
-          labelStyle={{ color: '#aaa' }}
+          labelStyle={{ color: th.textLabel }}
           formatter={(v: number) => [`${Math.round(v)}%`]}
         />
         <Legend
-          wrapperStyle={{ fontSize: 10, color: '#666' }}
+          wrapperStyle={{ fontSize: 10, color: th.chartLegend }}
           iconType="plainline"
           iconSize={12}
         />
-        {/* 日付変わり目の縦ガイド線 */}
         {refLines.map(xVal => (
           <ReferenceLine
             key={xVal}
             x={xVal}
-            stroke="rgba(255,255,255,0.45)"
+            stroke={th.chartRefLine}
             strokeWidth={1.5}
             strokeDasharray="4 3"
             label={undefined}

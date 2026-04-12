@@ -67,6 +67,7 @@ const en = {
   show7d:              '7-Day (claude.ai)',
   showOauth:           '7-Day OAuth Apps (Claude Code etc.)',
   showOpus:            '7-Day Opus',
+  showExtra:           'Extra Usage (monthly add-on)',
   sectionInterval:     'Update Interval',
   fetchEvery:          'Fetch every',
   minuteUnit:          '{0} min',
@@ -78,6 +79,7 @@ const en = {
   alertLabel7d:        '7-Day',
   alertLabel7dOauth:   '7-Day OAuth',
   alertLabel7dOpus:    '7-Day Opus',
+  alertLabelExtra:     'Extra Usage',
   alertsPct:           '(%)',
   alertsHint:          'Leave blank to disable alerts for that window',
   saveSettings:        'Save Settings',
@@ -86,6 +88,10 @@ const en = {
   langAuto:            'Auto (OS)',
   langEn:              'English',
   langJa:              '日本語',
+  sectionTheme:        'Appearance',
+  themeAuto:           'Auto (System)',
+  themeDark:           'Dark',
+  themeLight:          'Light',
 } as const
 
 const ja = {
@@ -145,6 +151,7 @@ const ja = {
   show7d:              '7日間 (claude.ai)',
   showOauth:           '7日間 OAuthアプリ (Claude Code 等)',
   showOpus:            '7日間 Opus',
+  showExtra:           'Extra使用量（月次追加分）',
   sectionInterval:     '更新間隔',
   fetchEvery:          '取得間隔',
   minuteUnit:          '{0} 分',
@@ -156,6 +163,7 @@ const ja = {
   alertLabel7d:        '7日間',
   alertLabel7dOauth:   '7日間 OAuth',
   alertLabel7dOpus:    '7日間 Opus',
+  alertLabelExtra:     'Extra使用量',
   alertsPct:           '(%)',
   alertsHint:          '空欄にするとそのウィンドウのアラートを無効にします',
   saveSettings:        '設定を保存',
@@ -164,6 +172,10 @@ const ja = {
   langAuto:            '自動 (OS設定)',
   langEn:              'English',
   langJa:              '日本語',
+  sectionTheme:        '外観',
+  themeAuto:           '自動 (システム設定)',
+  themeDark:           'ダーク',
+  themeLight:          'ライト',
 } satisfies typeof en
 
 const dict: Record<Lang, typeof en> = { en, ja }

@@ -38,23 +38,28 @@ export interface Settings {
   updateIntervalMinutes: number
   viewMode: ViewMode
   language: 'auto' | 'en' | 'ja'
+  theme: 'auto' | 'dark' | 'light'
   tray: {
     show5h: boolean
     show7d: boolean
     showOauth: boolean
     showOpus: boolean
+    showExtra: boolean
   }
   window: {
     opacity: number
     alwaysOnTop: boolean
-    x?: number
-    y?: number
+    compactX?: number
+    compactY?: number
+    detailX?: number
+    detailY?: number
   }
   alerts: {
     five_hour?: number
     seven_day?: number
     seven_day_oauth_apps?: number
     seven_day_opus?: number
+    extra_usage?: number
   }
 }
 

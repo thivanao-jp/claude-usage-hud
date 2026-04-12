@@ -1,5 +1,6 @@
 import { UsageEntry } from '../types'
 import { useT } from '../LangContext'
+import { useTheme } from '../ThemeContext'
 
 interface Props {
   label: string
@@ -38,6 +39,7 @@ function formatResetAt(iso: string | null, resettingLabel: string): { abs: strin
 
 export function UsageCard({ label, description, entry, color, highlight }: Props) {
   const t = useT()
+  const th = useTheme()
   const pct = Math.min(Math.round(entry.utilization), 100)
   const { abs, rel } = formatResetAt(entry.resets_at, t('resetting'))
 
@@ -45,19 +47,19 @@ export function UsageCard({ label, description, entry, color, highlight }: Props
 
   return (
     <div style={{
-      background: highlight ? 'rgba(224,161,43,0.06)' : 'rgba(255,255,255,0.03)',
-      border: `1px solid ${highlight ? 'rgba(224,161,43,0.2)' : 'rgba(255,255,255,0.06)'}`,
+      background: highlight ? th.bgCardHL : th.bgCard,
+      border: `1px solid ${highlight ? th.borderCardHL : th.borderCard}`,
       borderRadius: 8,
       padding: '8px 10px',
       marginBottom: 6
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#ccc' }}>{label}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: th.textSub }}>{label}</span>
         <span style={{ fontSize: 16, fontWeight: 700, color: barColor }}>{pct}%</span>
       </div>
 
       <div style={{
-        background: 'rgba(255,255,255,0.08)',
+        background: th.bgBar,
         borderRadius: 3,
         height: 5,
         marginBottom: 6,
@@ -73,11 +75,11 @@ export function UsageCard({ label, description, entry, color, highlight }: Props
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-        <span style={{ color: '#888' }}>{t('resetLabel')} <span style={{ color: '#bbb' }}>{abs}</span></span>
-        <span style={{ color: '#888' }}>{t('remaining')} <span style={{ color: '#bbb' }}>{rel}</span></span>
+        <span style={{ color: th.textMuted }}>{t('resetLabel')} <span style={{ color: th.textValue }}>{abs}</span></span>
+        <span style={{ color: th.textMuted }}>{t('remaining')} <span style={{ color: th.textValue }}>{rel}</span></span>
       </div>
 
-      <div style={{ fontSize: 10, color: '#777', marginTop: 3 }}>{description}</div>
+      <div style={{ fontSize: 10, color: th.textDesc, marginTop: 3 }}>{description}</div>
     </div>
   )
 }

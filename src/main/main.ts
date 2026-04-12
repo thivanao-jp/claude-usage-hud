@@ -73,7 +73,8 @@ function getCompactHeight(settings: Settings): number {
     settings.tray.show5h,
     settings.tray.show7d,
     settings.tray.showOauth,
-    settings.tray.showOpus
+    settings.tray.showOpus,
+    settings.tray.showExtra,
   ].filter(Boolean).length || 1
   return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD
 }
@@ -86,15 +87,32 @@ function getWindowSize(mode: ViewMode, settings: Settings): { w: number; h: numb
 
 // ---- HUD Window ----
 
+function getSavedPosition(mode: ViewMode, settings: Settings): { x: number; y: number } | null {
+  const cx = mode === 'compact' ? settings.window.compactX : settings.window.detailX
+  const cy = mode === 'compact' ? settings.window.compactY : settings.window.detailY
+  if (cx != null && cy != null && isPositionOnSomeDisplay(cx, cy)) return { x: cx, y: cy }
+  return null
+}
+
+function saveWindowPosition(mode: ViewMode, px: number, py: number): void {
+  const s = loadSettings()
+  if (mode === 'compact') {
+    s.window.compactX = px
+    s.window.compactY = py
+  } else {
+    s.window.detailX = px
+    s.window.detailY = py
+  }
+  saveSettings(s)
+}
+
 function createHudWindow(): BrowserWindow {
   const settings = loadSettings()
-  const { w, h } = getWindowSize(settings.viewMode, settings)
+  const mode = settings.viewMode
+  const { w, h } = getWindowSize(mode, settings)
 
-  let { x, y } =
-    settings.window.x != null && settings.window.y != null &&
-    isPositionOnSomeDisplay(settings.window.x, settings.window.y)
-      ? { x: settings.window.x, y: settings.window.y }
-      : centerOnActiveDisplay(w, h)
+  const savedPos = getSavedPosition(mode, settings)
+  const { x, y } = savedPos ?? centerOnActiveDisplay(w, h)
 
   const win = new BrowserWindow({
     width: w,
@@ -124,10 +142,7 @@ function createHudWindow(): BrowserWindow {
 
   win.on('moved', () => {
     const [px, py] = win.getPosition()
-    const s = loadSettings()
-    s.window.x = px
-    s.window.y = py
-    saveSettings(s)
+    saveWindowPosition(loadSettings().viewMode, px, py)
   })
 
   win.on('closed', () => { hudWindow = null })
@@ -149,22 +164,44 @@ function toggleHudWindow(): void {
   }
 }
 
-/** モード切り替え: ウィンドウのリサイズ + レンダラーへ通知 */
+/** モード切り替え: 現在位置を保存 → リサイズ → 保存済み位置に移動 */
 function switchViewMode(mode: ViewMode): void {
   const s = loadSettings()
+
+  // 現在のモードの位置を保存
+  if (hudWindow && !hudWindow.isDestroyed()) {
+    const [px, py] = hudWindow.getPosition()
+    if (s.viewMode === 'compact') {
+      s.window.compactX = px
+      s.window.compactY = py
+    } else {
+      s.window.detailX = px
+      s.window.detailY = py
+    }
+  }
+
   s.viewMode = mode
   saveSettings(s)
 
   if (!hudWindow || hudWindow.isDestroyed()) return
+
   const { w, h } = getWindowSize(mode, s)
   hudWindow.setSize(w, h)
+
+  // 新しいモードの保存済み位置に移動（なければ中央）
+  const savedPos = getSavedPosition(mode, s)
+  const { x, y } = savedPos ?? centerOnActiveDisplay(w, h)
+  hudWindow.setPosition(x, y)
+
   hudWindow.webContents.send('mode-changed', mode)
 }
 
 // ---- Tray ----
 
 function createTray(): void {
-  const iconPath = join(__dirname, '../../resources/tray-icon.png')
+  const iconPath = is.dev
+    ? join(__dirname, '../../resources/tray-icon.png')
+    : join(process.resourcesPath, 'resources', 'tray-icon.png')
   const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
   tray = new Tray(icon)
   tray.setTitle('--')
@@ -289,21 +326,28 @@ function scheduleUpdates(): void {
 // ---- Alerts ----
 
 function checkAlerts(usage: UsageData, settings: Settings): void {
-  const checks: Array<{ key: keyof UsageData; label: string }> = [
-    { key: 'five_hour', label: '5-hour' },
-    { key: 'seven_day', label: '7-day' },
-    { key: 'seven_day_oauth_apps', label: '7-day OAuth Apps' },
-    { key: 'seven_day_opus', label: '7-day Opus' }
+  const checks: Array<[keyof typeof settings.alerts, string]> = [
+    ['five_hour',            '5-hour'],
+    ['seven_day',            '7-day'],
+    ['seven_day_oauth_apps', '7-day OAuth Apps'],
+    ['seven_day_opus',       '7-day Opus'],
   ]
-  for (const { key, label } of checks) {
-    const entry = usage[key]
+  for (const [key, label] of checks) {
+    const entry = usage[key as keyof UsageData]
     const threshold = settings.alerts?.[key]
-    if (entry && threshold && entry.utilization >= threshold) {
+    if (entry && threshold && (entry as { utilization: number }).utilization >= threshold) {
       new Notification({
         title: 'Claude Usage HUD',
-        body: `${label} usage is at ${Math.round(entry.utilization)}% (threshold: ${threshold}%)`
+        body: `${label} usage is at ${Math.round((entry as { utilization: number }).utilization)}% (threshold: ${threshold}%)`
       }).show()
     }
+  }
+  const extraThreshold = settings.alerts?.extra_usage
+  if (extraThreshold && usage.extra_usage?.is_enabled && usage.extra_usage.utilization >= extraThreshold) {
+    new Notification({
+      title: 'Claude Usage HUD',
+      body: `Extra usage is at ${Math.round(usage.extra_usage.utilization)}% (threshold: ${extraThreshold}%)`
+    }).show()
   }
 }
 
@@ -351,6 +395,7 @@ if (!gotTheLock) {
   })
 
   app.whenReady().then(() => {
+    app.setName('Claude Usage HUD')
     app.dock?.hide()
 
     claudeWebFetcher.setLogCallback(log)

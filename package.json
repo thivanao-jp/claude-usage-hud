@@ -7,7 +7,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "postinstall": "electron-builder install-app-deps",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:win": "npm run build && electron-builder --win"
   },
@@ -35,12 +35,42 @@
   "build": {
     "appId": "jp.thivanao.claude-usage-hud",
     "productName": "Claude Usage HUD",
+    "files": [
+      "out/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/",
+        "to": "resources/"
+      }
+    ],
     "mac": {
       "category": "public.app-category.utilities",
-      "target": "dmg"
+      "icon": "build/icon.icns",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "Claude Usage HUD",
+      "window": { "width": 540, "height": 380 }
     },
     "win": {
-      "target": "nsis"
+      "icon": "build/icon.ico",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     }
   }
 }
