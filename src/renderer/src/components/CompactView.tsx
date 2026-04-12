@@ -9,16 +9,6 @@ interface Props {
   onRefresh: () => void
 }
 
-function formatAge(d: Date | null): string {
-  if (!d) return ''
-  const mins = Math.floor((Date.now() - d.getTime()) / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
-}
-
 interface BarItem {
   key: keyof UsageData
   label: string
@@ -32,27 +22,40 @@ const BAR_ITEMS: BarItem[] = [
   { key: 'seven_day_opus',       label: 'Opus', color: '#b07aee' },
 ]
 
-function formatReset(iso: string | null): { date: string; rel: string } {
-  if (!iso) return { date: '—', rel: '—' }
+/** 残り時間を major / minor に分解 */
+interface RelTime {
+  major: string   // "3d" / "11h" / "45m" など
+  minor: string   // "7h" / "4m" / ""
+}
+
+function formatReset(iso: string | null): { date: string; time: string; rel: RelTime } {
+  const empty = { date: '—', time: '—', rel: { major: '—', minor: '' } }
+  if (!iso) return empty
+
   const d = new Date(iso)
-  const now = new Date()
-  const diffMs = d.getTime() - now.getTime()
+  const diffMs = d.getTime() - Date.now()
 
-  const date = d.toLocaleString([], {
-    month: 'numeric', day: 'numeric',
-    weekday: 'short', hour: '2-digit', minute: '2-digit'
-  })
+  const date = d.toLocaleDateString([], { month: 'numeric', day: 'numeric', weekday: 'short' })
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
-  if (diffMs <= 0) return { date, rel: 'reset' }
+  if (diffMs <= 0) return { date, time, rel: { major: 'now', minor: '' } }
+
   const totalMin = Math.floor(diffMs / 60000)
-  const days = Math.floor(totalMin / 1440)
+  const days  = Math.floor(totalMin / 1440)
   const hours = Math.floor((totalMin % 1440) / 60)
-  const mins = totalMin % 60
-  let rel = ''
-  if (days > 0) rel += `${days}d `
-  if (hours > 0) rel += `${hours}h `
-  if (days === 0) rel += `${mins}m`
-  return { date, rel: rel.trim() }
+  const mins  = totalMin % 60
+
+  let rel: RelTime
+  if (days > 0)        rel = { major: `${days}d`,  minor: `${hours}h` }
+  else if (hours > 0)  rel = { major: `${hours}h`, minor: `${mins}m`  }
+  else                 rel = { major: `${mins}m`,   minor: ''          }
+
+  return { date, time, rel }
+}
+
+function formatUpdatedAt(d: Date | null): string {
+  if (!d) return ''
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
 export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchToDetail, onRefresh }: Props) {
@@ -63,8 +66,6 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
     if (item.key === 'seven_day_opus')       return settings.tray.showOpus
     return false
   })
-
-  // 表示するものが1つもなければ全部表示
   const bars = visibleBars.length > 0 ? visibleBars : BAR_ITEMS
 
   return (
@@ -85,19 +86,19 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
         padding: '0 6px',
         WebkitAppRegion: 'drag' as any,
       }}>
-        {/* stale インジケーター */}
+        {/* 更新時刻 / stale 警告 */}
         <div style={{
           fontSize: 10,
-          color: isStale ? '#e0a12b' : '#3a3a3a',
+          color: isStale ? '#e0a12b' : '#888',
           WebkitAppRegion: 'drag' as any,
         }}>
           {isStale
-            ? `⚠ ${lastSuccessAt ? formatAge(lastSuccessAt) : 'stale'}`
-            : lastSuccessAt ? formatAge(lastSuccessAt) : ''}
+            ? `⚠ stale — ${formatUpdatedAt(lastSuccessAt)}`
+            : lastSuccessAt ? formatUpdatedAt(lastSuccessAt) : ''}
         </div>
         <div style={{ display: 'flex', gap: 4, WebkitAppRegion: 'no-drag' as any }}>
-          <button onClick={onRefresh} title="Refresh" style={iconBtnStyle}>↻</button>
-          <button onClick={onSwitchToDetail} title="Detail view" style={iconBtnStyle}>⊞</button>
+          <button onClick={onRefresh}        title="Refresh"      style={iconBtnStyle}>↻</button>
+          <button onClick={onSwitchToDetail} title="Detail view"  style={iconBtnStyle}>⊞</button>
         </div>
       </div>
 
@@ -105,12 +106,9 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
       <div style={{ padding: '0 4px 4px' }}>
         {bars.map(item => {
           const entry = usage?.[item.key]
-          const pct = entry ? Math.min(Math.round(entry.utilization), 100) : 0
-          const { date, rel } = formatReset(entry?.resets_at ?? null)
+          const pct      = entry ? Math.min(Math.round(entry.utilization), 100) : 0
           const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : item.color
-
-          // バーの中のテキスト: 反転エフェクト (mix-blend-mode: difference)
-          const label = `${item.label}  ${date}  ${rel}  ${pct}%`
+          const { date, time, rel } = formatReset(entry?.resets_at ?? null)
 
           return (
             <div
@@ -135,7 +133,7 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
                 transition: 'width 0.4s ease',
               }} />
 
-              {/* Text (mix-blend-mode: difference で反転) */}
+              {/* Text columns (mix-blend-mode: difference で反転) */}
               <div style={{
                 position: 'absolute',
                 inset: 0,
@@ -146,10 +144,20 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
                 fontWeight: 600,
                 color: '#ffffff',
                 mixBlendMode: 'difference',
-                whiteSpace: 'nowrap',
-                letterSpacing: '0.02em',
+                gap: 0,
               }}>
-                {label}
+                {/* ラベル */}
+                <span style={{ width: 30, flexShrink: 0 }}>{item.label}</span>
+                {/* リセット日付 */}
+                <span style={{ width: 72, flexShrink: 0 }}>{date}</span>
+                {/* リセット時刻 */}
+                <span style={{ width: 44, flexShrink: 0 }}>{time}</span>
+                {/* 残り major (Xd / Xh / Xm) 右揃え */}
+                <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{rel.major}</span>
+                {/* 残り minor (Xh / Xm / 空) 右揃え */}
+                <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{rel.minor}</span>
+                {/* % 右揃え */}
+                <span style={{ flex: 1, textAlign: 'right' }}>{pct}%</span>
               </div>
             </div>
           )
@@ -162,7 +170,7 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
 const iconBtnStyle: React.CSSProperties = {
   background: 'none',
   border: 'none',
-  color: '#555',
+  color: '#777',
   cursor: 'pointer',
   fontSize: 13,
   padding: '2px 4px',

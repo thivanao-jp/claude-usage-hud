@@ -76,12 +76,12 @@ export function UsageCard({ label, description, entry, color, highlight }: Props
 
       {/* Reset info */}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-        <span style={{ color: '#555' }}>Reset: <span style={{ color: '#888' }}>{abs}</span></span>
-        <span style={{ color: '#555' }}>残り <span style={{ color: '#888' }}>{rel}</span></span>
+        <span style={{ color: '#888' }}>Reset: <span style={{ color: '#bbb' }}>{abs}</span></span>
+        <span style={{ color: '#888' }}>残り <span style={{ color: '#bbb' }}>{rel}</span></span>
       </div>
 
       {/* Description */}
-      <div style={{ fontSize: 10, color: '#444', marginTop: 3 }}>{description}</div>
+      <div style={{ fontSize: 10, color: '#777', marginTop: 3 }}>{description}</div>
     </div>
   )
 }

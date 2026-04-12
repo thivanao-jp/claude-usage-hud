@@ -83,7 +83,7 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
 
       {/* Profile */}
       {profile && (
-        <div style={{ padding: '6px 14px 2px', fontSize: 11, color: '#666' }}>
+        <div style={{ padding: '6px 14px 2px', fontSize: 11, color: '#888' }}>
           {profile.account?.email}
           {profile.organization?.name ? ` · ${profile.organization.name}` : ''}
         </div>
@@ -117,7 +117,7 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '6px 12px' }}>
         <button
           onClick={() => setShowChart(!showChart)}
-          style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 12, padding: 0 }}
+          style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: 12, padding: 0 }}
         >
           {showChart ? '▲' : '▼'} Usage History
         </button>
@@ -131,7 +131,7 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
                   style={{
                     background: chartDays === d ? '#333' : 'none',
                     border: '1px solid #333',
-                    color: chartDays === d ? '#e8e8e8' : '#555',
+                    color: chartDays === d ? '#e8e8e8' : '#888',
                     borderRadius: 4,
                     padding: '2px 8px',
                     fontSize: 11,
@@ -150,22 +150,20 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
       {/* Footer */}
       <div style={{
         padding: '4px 12px 6px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         fontSize: 10,
+        textAlign: 'right',
       }}>
         {isStale ? (
           <span style={{ color: '#e0a12b' }}>
-            ⚠ Stale data — last success: {lastSuccessAt
-              ? `${lastSuccessAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${formatAge(lastSuccessAt)})`
+            ⚠ stale — last success: {lastSuccessAt
+              ? lastSuccessAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               : 'unknown'}
           </span>
         ) : (
-          <span style={{ color: '#3a3a3a' }}>
-            {lastSuccessAt
-              ? `Updated ${lastSuccessAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${formatAge(lastSuccessAt)})`
-              : `Updated ${lastUpdated}`}
+          <span style={{ color: '#888' }}>
+            Updated {lastSuccessAt
+              ? lastSuccessAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : lastUpdated}
           </span>
         )}
       </div>
