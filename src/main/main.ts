@@ -247,13 +247,13 @@ async function doUpdate(): Promise<void> {
   if (!settings.token) return
 
   try {
-    const [usage, profile] = await Promise.all([
-      fetchUsage(settings.token),
-      lastProfile ? Promise.resolve(lastProfile) : fetchProfile(settings.token)
-    ])
+    // プロフィール（org UUID 含む）をまず確保
+    if (!lastProfile) {
+      lastProfile = await fetchProfile(settings.token)
+    }
+    const orgUuid = lastProfile.organization?.uuid
 
-    // プロフィールは変化しないので成功時のみ更新
-    if (!lastProfile) lastProfile = profile
+    const usage = await fetchUsage(settings.token, orgUuid)
 
     lastUsage = usage
     lastSuccessAt = new Date()
