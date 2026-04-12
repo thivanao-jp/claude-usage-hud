@@ -6,11 +6,19 @@ export interface UsageEntry {
   resets_at: string | null
 }
 
+export interface ExtraUsage {
+  is_enabled: boolean
+  monthly_limit: number
+  used_credits: number
+  utilization: number
+}
+
 export interface UsageData {
   five_hour: UsageEntry | null
   seven_day: UsageEntry | null
   seven_day_oauth_apps: UsageEntry | null
   seven_day_opus: UsageEntry | null
+  extra_usage: ExtraUsage | null
 }
 
 export interface ProfileData {

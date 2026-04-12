@@ -33,12 +33,16 @@ const en = {
   label7d:        '7-Day (claude.ai)',
   label7dOauth:   '7-Day (OAuth Apps)',
   label7dOpus:    '7-Day (Opus)',
+  labelExtra:     'Extra Usage',
 
   // カード説明
   desc5h:         'Short-term burst (rolling)',
   desc7d:         'Weekly · claude.ai / Mobile',
   desc7dOauth:    'Weekly · Claude Code / Cursor / Windsurf etc.',
   desc7dOpus:     'Opus weekly limit',
+  descExtra:      'Monthly add-on credits (beyond plan quota)',
+  creditsUnit:    'credits',
+  monthlyReset:   'Resets monthly',
 
   // ---- App (初期状態) ----
   setupTitle:     'Claude Usage HUD',
@@ -111,11 +115,15 @@ const ja = {
   label7d:        '7日間 (claude.ai)',
   label7dOauth:   '7日間 (OAuthアプリ)',
   label7dOpus:    '7日間 (Opus)',
+  labelExtra:     'Extra使用量',
 
   desc5h:         '短期バースト（ローリング）',
   desc7d:         '週次 · claude.ai / モバイル',
   desc7dOauth:    '週次 · Claude Code / Cursor / Windsurf 等',
   desc7dOpus:     'Opus専用週次制限',
+  descExtra:      '月次追加クレジット（プランの枠を超えた分）',
+  creditsUnit:    'クレジット',
+  monthlyReset:   '月次リセット',
 
   setupTitle:     'Claude Usage HUD',
   setupDesc:      'Claude.ai にログインして開始',

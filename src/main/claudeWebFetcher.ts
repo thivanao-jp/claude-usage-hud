@@ -256,14 +256,29 @@ function mapUsage(raw: unknown): UsageData | null {
     ? r['utilization'] as Record<string, unknown>
     : r
 
+  // extra_usage は構造が異なるので個別にマッピング
+  const extraRaw = r['extra_usage']
+  let extra_usage = null
+  if (extraRaw && typeof extraRaw === 'object') {
+    const e = extraRaw as Record<string, unknown>
+    if (e['is_enabled']) {
+      extra_usage = {
+        is_enabled: Boolean(e['is_enabled']),
+        monthly_limit: Number(e['monthly_limit'] ?? 0),
+        used_credits: Number(e['used_credits'] ?? 0),
+        utilization: Number(e['utilization'] ?? 0),
+      }
+    }
+  }
+
   const result: UsageData = {
     five_hour: entry(src, 'five_hour'),
     seven_day: entry(src, 'seven_day'),
     seven_day_oauth_apps: entry(src, 'seven_day_oauth_apps'),
     seven_day_opus: entry(src, 'seven_day_opus'),
+    extra_usage,
   }
 
-  // 全フィールドが null なら無効データとみなす
   if (!result.five_hour && !result.seven_day) return null
   return result
 }

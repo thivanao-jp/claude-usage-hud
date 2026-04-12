@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { UsageData, ProfileData } from '../types'
+import { UsageData, ProfileData, ExtraUsage } from '../types'
 import { UsageCard } from './UsageCard'
 import { HistoryChart } from './HistoryChart'
 import { useT } from '../LangContext'
@@ -101,6 +101,9 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
             {usage.seven_day_opus && (
               <UsageCard label={t('label7dOpus')} description={t('desc7dOpus')} entry={usage.seven_day_opus} color="#b07aee" />
             )}
+            {usage.extra_usage?.is_enabled && (
+              <ExtraUsageCard extra={usage.extra_usage} />
+            )}
           </>
         ) : (
           <div style={{ color: '#555', textAlign: 'center', padding: '20px 0', fontSize: 12 }}>
@@ -157,6 +160,39 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
           </span>
         )}
       </div>
+    </div>
+  )
+}
+
+function ExtraUsageCard({ extra }: { extra: ExtraUsage }) {
+  const t = useT()
+  const pct = Math.min(Math.round(extra.utilization), 100)
+  const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : '#a78bfa'
+
+  return (
+    <div style={{
+      background: 'rgba(167,139,250,0.06)',
+      border: '1px solid rgba(167,139,250,0.2)',
+      borderRadius: 8,
+      padding: '8px 10px',
+      marginBottom: 6
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#ccc' }}>{t('labelExtra')}</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: barColor }}>{pct}%</span>
+      </div>
+      <div style={{
+        background: 'rgba(255,255,255,0.08)', borderRadius: 3, height: 5, marginBottom: 6, overflow: 'hidden'
+      }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 3, transition: 'width 0.4s ease' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+        <span style={{ color: '#888' }}>
+          {extra.used_credits.toLocaleString()} / {extra.monthly_limit.toLocaleString()} {t('creditsUnit')}
+        </span>
+        <span style={{ color: '#888' }}>{t('monthlyReset')}</span>
+      </div>
+      <div style={{ fontSize: 10, color: '#777', marginTop: 3 }}>{t('descExtra')}</div>
     </div>
   )
 }

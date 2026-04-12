@@ -20,20 +20,26 @@ function db(): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_recorded_at ON usage_history(recorded_at);
   `)
+  // 既存DBへの extra_usage カラム追加（なければ追加）
+  const cols = (_db.prepare("PRAGMA table_info(usage_history)").all() as { name: string }[]).map(c => c.name)
+  if (!cols.includes('extra_usage')) {
+    _db.exec('ALTER TABLE usage_history ADD COLUMN extra_usage REAL;')
+  }
   return _db
 }
 
 export function saveUsageHistory(usage: UsageData): void {
   db()
     .prepare(
-      `INSERT INTO usage_history (five_hour, seven_day, seven_day_oauth_apps, seven_day_opus)
-       VALUES (?, ?, ?, ?)`
+      `INSERT INTO usage_history (five_hour, seven_day, seven_day_oauth_apps, seven_day_opus, extra_usage)
+       VALUES (?, ?, ?, ?, ?)`
     )
     .run(
       usage.five_hour?.utilization ?? null,
       usage.seven_day?.utilization ?? null,
       usage.seven_day_oauth_apps?.utilization ?? null,
-      usage.seven_day_opus?.utilization ?? null
+      usage.seven_day_opus?.utilization ?? null,
+      usage.extra_usage?.utilization ?? null
     )
 }
 
@@ -43,12 +49,13 @@ export interface HistoryRow {
   seven_day: number | null
   seven_day_oauth_apps: number | null
   seven_day_opus: number | null
+  extra_usage: number | null
 }
 
 export function getUsageHistory(days: number): HistoryRow[] {
   return db()
     .prepare(
-      `SELECT recorded_at, five_hour, seven_day, seven_day_oauth_apps, seven_day_opus
+      `SELECT recorded_at, five_hour, seven_day, seven_day_oauth_apps, seven_day_opus, extra_usage
        FROM usage_history
        WHERE recorded_at >= datetime('now', ?)
        ORDER BY recorded_at ASC`
