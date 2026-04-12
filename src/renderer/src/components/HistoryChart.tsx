@@ -96,7 +96,8 @@ export function HistoryChart({ days }: Props) {
           <ReferenceLine
             key={xVal}
             x={xVal}
-            stroke="rgba(255,255,255,0.15)"
+            stroke="rgba(255,255,255,0.45)"
+            strokeWidth={1.5}
             strokeDasharray="4 3"
             label={undefined}
           />
