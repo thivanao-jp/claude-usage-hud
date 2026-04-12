@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('api', {
   closeHud: () => ipcRenderer.invoke('close-hud'),
   autoDetectToken: () => ipcRenderer.invoke('auto-detect-token'),
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  showLoginWindow: () => ipcRenderer.invoke('show-login-window'),
+  hideLoginWindow: () => ipcRenderer.invoke('hide-login-window'),
+  getLoginStatus: () => ipcRenderer.invoke('get-login-status'),
   onUsageUpdate: (cb: (data: unknown) => void) => {
     ipcRenderer.on('usage-update', (_e, data) => cb(data))
     return () => ipcRenderer.removeAllListeners('usage-update')
@@ -18,5 +21,13 @@ contextBridge.exposeInMainWorld('api', {
   onModeChanged: (cb: (mode: string) => void) => {
     ipcRenderer.on('mode-changed', (_e, mode) => cb(mode))
     return () => ipcRenderer.removeAllListeners('mode-changed')
+  },
+  onLoginStatusChanged: (cb: (status: string) => void) => {
+    ipcRenderer.on('login-status-changed', (_e, status) => cb(status))
+    return () => ipcRenderer.removeAllListeners('login-status-changed')
+  },
+  onSettingsChanged: (cb: (s: unknown) => void) => {
+    ipcRenderer.on('settings-changed', (_e, s) => cb(s))
+    return () => ipcRenderer.removeAllListeners('settings-changed')
   }
 })

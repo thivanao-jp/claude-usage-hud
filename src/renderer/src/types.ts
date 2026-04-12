@@ -29,6 +29,7 @@ export interface Settings {
   token: string
   updateIntervalMinutes: number
   viewMode: ViewMode
+  language: 'auto' | 'en' | 'ja'
   tray: {
     show5h: boolean
     show7d: boolean
@@ -70,6 +71,9 @@ declare global {
       closeHud: () => Promise<void>
       autoDetectToken: () => Promise<string | null>
       openExternal: (url: string) => Promise<void>
+      showLoginWindow: () => Promise<void>
+      hideLoginWindow: () => Promise<void>
+      getLoginStatus: () => Promise<'logged-in' | 'logged-out' | 'unknown'>
       onUsageUpdate: (cb: (data: {
         usage: UsageData
         profile: ProfileData
@@ -77,6 +81,8 @@ declare global {
         isStale: boolean
       }) => void) => () => void
       onModeChanged: (cb: (mode: string) => void) => () => void
+      onLoginStatusChanged: (cb: (status: 'logged-in' | 'logged-out' | 'unknown') => void) => () => void
+      onSettingsChanged: (cb: (s: Settings) => void) => () => void
     }
   }
 }

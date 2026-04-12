@@ -1,36 +1,37 @@
 import { useEffect, useState } from 'react'
 import { Settings } from '../types'
+import { useT } from '../LangContext'
 
 const defaultSettings: Settings = {
   token: '',
-  updateIntervalMinutes: 5,
+  updateIntervalMinutes: 10,
+  viewMode: 'compact',
+  language: 'auto',
   tray: { show5h: true, show7d: true, showOauth: false, showOpus: false },
   window: { opacity: 90, alwaysOnTop: true },
-  alerts: {}
+  alerts: {},
 }
 
-export function SettingsView() {
+interface Props {
+  onSettingsChange?: (s: Settings) => void
+}
+
+export function SettingsView({ onSettingsChange }: Props) {
+  const t = useT()
   const [s, setS] = useState<Settings>(defaultSettings)
   const [saved, setSaved] = useState(false)
-  const [detecting, setDetecting] = useState(false)
+  const [loginStatus, setLoginStatus] = useState<'logged-in' | 'logged-out' | 'unknown'>('unknown')
 
   useEffect(() => {
     window.api.getSettings().then(setS)
+    window.api.getLoginStatus().then(setLoginStatus)
+    const off = window.api.onLoginStatusChanged(status => setLoginStatus(status))
+    return off
   }, [])
-
-  async function handleAutoDetect() {
-    setDetecting(true)
-    const token = await window.api.autoDetectToken()
-    setDetecting(false)
-    if (token) {
-      setS(prev => ({ ...prev, token }))
-    } else {
-      alert('Token not found. Please enter manually.')
-    }
-  }
 
   async function handleSave() {
     await window.api.saveSettings(s)
+    onSettingsChange?.(s)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -45,82 +46,81 @@ export function SettingsView() {
       padding: 20,
       color: '#e8e8e8'
     }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20 }}>Settings</h2>
+      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20 }}>{t('settingsTitle')}</h2>
 
-      {/* Token */}
-      <Section title="Authentication">
-        <Label>OAuth Access Token</Label>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-          <input
-            type="password"
-            value={s.token}
-            onChange={e => upd(p => ({ ...p, token: e.target.value }))}
-            placeholder="sk-ant-oat01-..."
-            style={inputStyle}
-          />
+      {/* Claude.ai Login */}
+      <Section title={t('sectionClaudeSession')}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <span style={{
+            display: 'inline-block',
+            width: 8, height: 8, borderRadius: '50%',
+            background: loginStatus === 'logged-in' ? '#4caf50'
+              : loginStatus === 'logged-out' ? '#f44336'
+              : '#888',
+            flexShrink: 0
+          }} />
+          <span style={{ fontSize: 13, color: '#ccc' }}>
+            {loginStatus === 'logged-in' ? t('loggedIn')
+              : loginStatus === 'logged-out' ? t('notLoggedIn')
+              : t('statusUnknown')}
+          </span>
           <button
-            onClick={handleAutoDetect}
-            disabled={detecting}
-            style={secondaryBtn}
+            onClick={() => window.api.showLoginWindow()}
+            style={{ ...secondaryBtn, marginLeft: 'auto' }}
           >
-            {detecting ? '...' : 'Auto-detect'}
+            {loginStatus === 'logged-in' ? t('relogin') : t('loginToClaude')}
           </button>
         </div>
-        <div style={{ fontSize: 11, color: '#555' }}>
-          Auto-detect reads from Claude Code's local credentials (Keychain or ~/.claude/.credentials.json)
-        </div>
+        <div style={{ fontSize: 11, color: '#555' }}>{t('loginHint')}</div>
+      </Section>
+
+      {/* Language */}
+      <Section title={t('sectionLanguage')}>
+        <select
+          value={s.language ?? 'auto'}
+          onChange={e => upd(p => ({ ...p, language: e.target.value as Settings['language'] }))}
+          style={{ ...inputStyle, width: 'auto' }}
+        >
+          <option value="auto">{t('langAuto')}</option>
+          <option value="en">{t('langEn')}</option>
+          <option value="ja">{t('langJa')}</option>
+        </select>
       </Section>
 
       {/* Tray display */}
-      <Section title="Menu Bar / Tray Display">
-        <Label>Show in tray label</Label>
+      <Section title={t('sectionTray')}>
+        <Label>{t('showInTray')}</Label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <CheckRow
-            label="5-Hour window"
-            checked={s.tray.show5h}
-            onChange={v => upd(p => ({ ...p, tray: { ...p.tray, show5h: v } }))}
-          />
-          <CheckRow
-            label="7-Day (claude.ai)"
-            checked={s.tray.show7d}
-            onChange={v => upd(p => ({ ...p, tray: { ...p.tray, show7d: v } }))}
-          />
-          <CheckRow
-            label="7-Day OAuth Apps (Claude Code etc.)"
-            checked={s.tray.showOauth}
-            onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showOauth: v } }))}
-          />
-          <CheckRow
-            label="7-Day Opus"
-            checked={s.tray.showOpus}
-            onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showOpus: v } }))}
-          />
+          <CheckRow label={t('show5h')}    checked={s.tray.show5h}    onChange={v => upd(p => ({ ...p, tray: { ...p.tray, show5h: v } }))} />
+          <CheckRow label={t('show7d')}    checked={s.tray.show7d}    onChange={v => upd(p => ({ ...p, tray: { ...p.tray, show7d: v } }))} />
+          <CheckRow label={t('showOauth')} checked={s.tray.showOauth} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showOauth: v } }))} />
+          <CheckRow label={t('showOpus')}  checked={s.tray.showOpus}  onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showOpus: v } }))} />
         </div>
       </Section>
 
       {/* Update interval */}
-      <Section title="Update Interval">
-        <Label>Fetch every</Label>
+      <Section title={t('sectionInterval')}>
+        <Label>{t('fetchEvery')}</Label>
         <select
           value={s.updateIntervalMinutes}
           onChange={e => upd(p => ({ ...p, updateIntervalMinutes: Number(e.target.value) }))}
           style={{ ...inputStyle, width: 'auto' }}
         >
           {[1, 5, 10, 30].map(m => (
-            <option key={m} value={m}>{m} min</option>
+            <option key={m} value={m}>{t('minuteUnit', m)}</option>
           ))}
         </select>
       </Section>
 
       {/* Window */}
-      <Section title="Floating Window">
+      <Section title={t('sectionWindow')}>
         <CheckRow
-          label="Always on top"
+          label={t('alwaysOnTop')}
           checked={s.window.alwaysOnTop}
           onChange={v => upd(p => ({ ...p, window: { ...p.window, alwaysOnTop: v } }))}
         />
         <div style={{ marginTop: 8 }}>
-          <Label>Opacity: {s.window.opacity}%</Label>
+          <Label>{t('opacityLabel', s.window.opacity)}</Label>
           <input
             type="range"
             min={20}
@@ -133,37 +133,35 @@ export function SettingsView() {
       </Section>
 
       {/* Alerts */}
-      <Section title="Alerts (OS Notification)">
+      <Section title={t('sectionAlerts')}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <AlertThreshold
-            label="5-Hour"
+            label={`${t('alertLabel5h')} ${t('alertsPct')}`}
             value={s.alerts.five_hour}
             onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, five_hour: v } }))}
           />
           <AlertThreshold
-            label="7-Day"
+            label={`${t('alertLabel7d')} ${t('alertsPct')}`}
             value={s.alerts.seven_day}
             onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, seven_day: v } }))}
           />
           <AlertThreshold
-            label="7-Day OAuth"
+            label={`${t('alertLabel7dOauth')} ${t('alertsPct')}`}
             value={s.alerts.seven_day_oauth_apps}
             onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, seven_day_oauth_apps: v } }))}
           />
           <AlertThreshold
-            label="7-Day Opus"
+            label={`${t('alertLabel7dOpus')} ${t('alertsPct')}`}
             value={s.alerts.seven_day_opus}
             onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, seven_day_opus: v } }))}
           />
         </div>
-        <div style={{ fontSize: 11, color: '#555', marginTop: 6 }}>
-          Leave blank to disable alerts for that window
-        </div>
+        <div style={{ fontSize: 11, color: '#555', marginTop: 6 }}>{t('alertsHint')}</div>
       </Section>
 
       {/* Save */}
       <button onClick={handleSave} style={primaryBtn}>
-        {saved ? '✓ Saved' : 'Save Settings'}
+        {saved ? t('savedConfirm') : t('saveSettings')}
       </button>
     </div>
   )
@@ -196,7 +194,7 @@ function CheckRow({ label, checked, onChange }: { label: string; checked: boolea
 function AlertThreshold({ label, value, onChange }: { label: string; value?: number; onChange: (v?: number) => void }) {
   return (
     <div>
-      <Label>{label} (%)</Label>
+      <Label>{label}</Label>
       <input
         type="number"
         min={1}

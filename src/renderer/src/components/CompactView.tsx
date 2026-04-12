@@ -1,4 +1,5 @@
 import { UsageData, Settings } from '../types'
+import { useT } from '../LangContext'
 
 interface Props {
   usage: UsageData | null
@@ -22,13 +23,12 @@ const BAR_ITEMS: BarItem[] = [
   { key: 'seven_day_opus',       label: 'Opus', color: '#b07aee' },
 ]
 
-/** 残り時間を major / minor に分解 */
 interface RelTime {
-  major: string   // "3d" / "11h" / "45m" など
-  minor: string   // "7h" / "4m" / ""
+  major: string
+  minor: string
 }
 
-function formatReset(iso: string | null): { date: string; time: string; rel: RelTime } {
+function formatReset(iso: string | null, nowLabel: string): { date: string; time: string; rel: RelTime } {
   const empty = { date: '—', time: '—', rel: { major: '—', minor: '' } }
   if (!iso) return empty
 
@@ -38,7 +38,7 @@ function formatReset(iso: string | null): { date: string; time: string; rel: Rel
   const date = d.toLocaleDateString([], { month: 'numeric', day: 'numeric', weekday: 'short' })
   const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
-  if (diffMs <= 0) return { date, time, rel: { major: 'now', minor: '' } }
+  if (diffMs <= 0) return { date, time, rel: { major: nowLabel, minor: '' } }
 
   const totalMin = Math.floor(diffMs / 60000)
   const days  = Math.floor(totalMin / 1440)
@@ -59,6 +59,8 @@ function formatUpdatedAt(d: Date | null): string {
 }
 
 export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchToDetail, onRefresh }: Props) {
+  const t = useT()
+
   const visibleBars = BAR_ITEMS.filter(item => {
     if (item.key === 'five_hour')            return settings.tray.show5h
     if (item.key === 'seven_day')            return settings.tray.show7d
@@ -86,19 +88,18 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
         padding: '0 6px',
         WebkitAppRegion: 'drag' as any,
       }}>
-        {/* 更新時刻 / stale 警告 */}
         <div style={{
           fontSize: 10,
           color: isStale ? '#e0a12b' : '#888',
           WebkitAppRegion: 'drag' as any,
         }}>
           {isStale
-            ? `⚠ stale — ${formatUpdatedAt(lastSuccessAt)}`
+            ? `${t('stalePrefix')}${formatUpdatedAt(lastSuccessAt)}`
             : lastSuccessAt ? formatUpdatedAt(lastSuccessAt) : ''}
         </div>
         <div style={{ display: 'flex', gap: 4, WebkitAppRegion: 'no-drag' as any }}>
-          <button onClick={onRefresh}        title="Refresh"      style={iconBtnStyle}>↻</button>
-          <button onClick={onSwitchToDetail} title="Detail view"  style={iconBtnStyle}>⊞</button>
+          <button onClick={onRefresh}        title={t('refresh')}    style={iconBtnStyle}>↻</button>
+          <button onClick={onSwitchToDetail} title={t('detailView')} style={iconBtnStyle}>⊞</button>
         </div>
       </div>
 
@@ -108,7 +109,7 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
           const entry = usage?.[item.key]
           const pct      = entry ? Math.min(Math.round(entry.utilization), 100) : 0
           const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : item.color
-          const { date, time, rel } = formatReset(entry?.resets_at ?? null)
+          const { date, time, rel } = formatReset(entry?.resets_at ?? null, t('timeNow'))
 
           return (
             <div
@@ -123,7 +124,6 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
                 WebkitAppRegion: 'drag' as any,
               }}
             >
-              {/* Fill */}
               <div style={{
                 position: 'absolute',
                 inset: 0,
@@ -132,8 +132,6 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
                 borderRadius: 4,
                 transition: 'width 0.4s ease',
               }} />
-
-              {/* Text columns (mix-blend-mode: difference で反転) */}
               <div style={{
                 position: 'absolute',
                 inset: 0,
@@ -146,17 +144,11 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
                 mixBlendMode: 'difference',
                 gap: 0,
               }}>
-                {/* ラベル */}
                 <span style={{ width: 30, flexShrink: 0 }}>{item.label}</span>
-                {/* リセット日付 */}
                 <span style={{ width: 72, flexShrink: 0 }}>{date}</span>
-                {/* リセット時刻 */}
                 <span style={{ width: 44, flexShrink: 0 }}>{time}</span>
-                {/* 残り major (Xd / Xh / Xm) 右揃え */}
                 <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{rel.major}</span>
-                {/* 残り minor (Xh / Xm / 空) 右揃え */}
                 <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{rel.minor}</span>
-                {/* % 右揃え */}
                 <span style={{ flex: 1, textAlign: 'right' }}>{pct}%</span>
               </div>
             </div>

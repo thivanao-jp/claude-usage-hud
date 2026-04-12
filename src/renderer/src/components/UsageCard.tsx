@@ -1,4 +1,5 @@
 import { UsageEntry } from '../types'
+import { useT } from '../LangContext'
 
 interface Props {
   label: string
@@ -8,13 +9,11 @@ interface Props {
   highlight?: boolean
 }
 
-function formatResetAt(iso: string | null): { abs: string; rel: string } {
+function formatResetAt(iso: string | null, resettingLabel: string): { abs: string; rel: string } {
   if (!iso) return { abs: '—', rel: '—' }
   const d = new Date(iso)
-  const now = new Date()
-  const diffMs = d.getTime() - now.getTime()
+  const diffMs = d.getTime() - Date.now()
 
-  // 絶対時刻
   const abs = d.toLocaleString([], {
     month: 'numeric',
     day: 'numeric',
@@ -23,8 +22,8 @@ function formatResetAt(iso: string | null): { abs: string; rel: string } {
     minute: '2-digit'
   })
 
-  // 残り時間
-  if (diffMs <= 0) return { abs, rel: 'Resetting...' }
+  if (diffMs <= 0) return { abs, rel: resettingLabel }
+
   const totalMin = Math.floor(diffMs / 60000)
   const days = Math.floor(totalMin / 1440)
   const hours = Math.floor((totalMin % 1440) / 60)
@@ -38,8 +37,9 @@ function formatResetAt(iso: string | null): { abs: string; rel: string } {
 }
 
 export function UsageCard({ label, description, entry, color, highlight }: Props) {
+  const t = useT()
   const pct = Math.min(Math.round(entry.utilization), 100)
-  const { abs, rel } = formatResetAt(entry.resets_at)
+  const { abs, rel } = formatResetAt(entry.resets_at, t('resetting'))
 
   const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : color
 
@@ -51,13 +51,11 @@ export function UsageCard({ label, description, entry, color, highlight }: Props
       padding: '8px 10px',
       marginBottom: 6
     }}>
-      {/* Label row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#ccc' }}>{label}</span>
         <span style={{ fontSize: 16, fontWeight: 700, color: barColor }}>{pct}%</span>
       </div>
 
-      {/* Progress bar */}
       <div style={{
         background: 'rgba(255,255,255,0.08)',
         borderRadius: 3,
@@ -74,13 +72,11 @@ export function UsageCard({ label, description, entry, color, highlight }: Props
         }} />
       </div>
 
-      {/* Reset info */}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-        <span style={{ color: '#888' }}>Reset: <span style={{ color: '#bbb' }}>{abs}</span></span>
-        <span style={{ color: '#888' }}>残り <span style={{ color: '#bbb' }}>{rel}</span></span>
+        <span style={{ color: '#888' }}>{t('resetLabel')} <span style={{ color: '#bbb' }}>{abs}</span></span>
+        <span style={{ color: '#888' }}>{t('remaining')} <span style={{ color: '#bbb' }}>{rel}</span></span>
       </div>
 
-      {/* Description */}
       <div style={{ fontSize: 10, color: '#777', marginTop: 3 }}>{description}</div>
     </div>
   )

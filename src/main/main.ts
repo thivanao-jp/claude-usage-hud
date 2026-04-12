@@ -10,29 +10,32 @@ import {
   screen
 } from 'electron'
 import { join } from 'path'
+import { appendFileSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
 import { loadSettings, saveSettings, Settings, ViewMode } from './settings'
-import { fetchUsage, fetchProfile, UsageData, ProfileData, ApiError } from './claudeApi'
+import { UsageData, ProfileData } from './claudeApi'
 import { saveUsageHistory, getUsageHistory } from './db'
 import { getTokenFromCredentials } from './credentials'
+import { ClaudeWebFetcher } from './claudeWebFetcher'
+
+// stdoutがバッファリングされることがあるため、ログは直接ファイルに書き込む
+const LOG_PATH = join(process.env['HOME'] ?? '', 'Library/Logs/claude-usage-hud.log')
+function log(...args: unknown[]): void {
+  const line = `[${new Date().toISOString()}] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}\n`
+  try { appendFileSync(LOG_PATH, line) } catch {}
+  console.log(...args)
+}
 
 let tray: Tray | null = null
 let hudWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
 let updateTimer: ReturnType<typeof setInterval> | null = null
-let retryTimer: ReturnType<typeof setTimeout> | null = null
+
+const claudeWebFetcher = new ClaudeWebFetcher()
 
 let lastUsage: UsageData | null = null
 let lastProfile: ProfileData | null = null
-let lastSuccessAt: Date | null = null   // 最後に成功した時刻
-let retryCount = 0                      // 連続失敗回数
-
-// 指数バックオフ: 30s → 1m → 2m → 4m → 8m → 16m → 30m (上限)
-const BACKOFF_BASE_MS = 30 * 1000
-const BACKOFF_MAX_MS  = 30 * 60 * 1000
-function nextBackoffMs(): number {
-  return Math.min(BACKOFF_BASE_MS * Math.pow(2, retryCount), BACKOFF_MAX_MS)
-}
+let lastSuccessAt: Date | null = null
 
 // ---- Display Helper ----
 
@@ -244,53 +247,36 @@ function sendToHud(isStale: boolean): void {
 
 async function doUpdate(): Promise<void> {
   const settings = loadSettings()
-  if (!settings.token) return
 
   try {
-    // プロフィール（org UUID 含む）をまず確保
-    if (!lastProfile) {
-      lastProfile = await fetchProfile(settings.token)
+    const webResult = await claudeWebFetcher.fetchData()
+    if (webResult.usage) {
+      lastUsage = webResult.usage
+      if (webResult.profile) lastProfile = webResult.profile
+      lastSuccessAt = new Date()
+      saveUsageHistory(webResult.usage)
+      updateTrayTitle(webResult.usage, settings, false)
+      checkAlerts(webResult.usage, settings)
+      sendToHud(false)
+      log('doUpdate: web fetch OK')
+      return
     }
-    const orgUuid = lastProfile.organization?.uuid
-
-    const usage = await fetchUsage(settings.token, orgUuid)
-
-    lastUsage = usage
-    lastSuccessAt = new Date()
-    retryCount = 0  // 成功したのでリセット
-
-    saveUsageHistory(usage)
-    updateTrayTitle(usage, settings, false)
-    checkAlerts(usage, settings)
-    sendToHud(false)
-
+    log('doUpdate: web fetch returned no data (loginStatus:', webResult.loginStatus, ')')
   } catch (err) {
-    const isRateLimit = err instanceof ApiError && err.isRateLimit
-    console.warn(`Update failed (${isRateLimit ? '429 rate limit' : 'error'}):`, err)
+    log('doUpdate: web fetch error:', err)
+  }
 
-    if (isRateLimit) {
-      retryCount++
-      const delay = nextBackoffMs()
-      console.log(`Retry #${retryCount} in ${Math.round(delay / 1000)}s`)
-      // 既存のリトライタイマーをキャンセルして再スケジュール
-      if (retryTimer) clearTimeout(retryTimer)
-      retryTimer = setTimeout(doUpdate, delay)
-    }
-
-    // キャッシュデータがあれば stale 表示、なければ '--'
-    if (lastUsage) {
-      updateTrayTitle(lastUsage, settings, true)
-      sendToHud(true)
-    } else {
-      if (tray) tray.setTitle('--')
-    }
+  // データ取得失敗: キャッシュがあれば stale 表示
+  if (lastUsage) {
+    updateTrayTitle(lastUsage, settings, true)
+    sendToHud(true)
+  } else {
+    tray?.setTitle('--')
   }
 }
 
 function scheduleUpdates(): void {
   if (updateTimer) clearInterval(updateTimer)
-  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
-  retryCount = 0
 
   const settings = loadSettings()
   const intervalMs = (settings.updateIntervalMinutes ?? 5) * 60 * 1000
@@ -333,11 +319,12 @@ ipcMain.handle('save-settings', (_e, settings: Settings) => {
     const s = loadSettings()
     hudWindow.setAlwaysOnTop(s.window.alwaysOnTop)
     hudWindow.setOpacity(s.window.opacity / 100)
-    // コンパクト表示のバー数が変わった場合リサイズ
     if (s.viewMode === 'compact') {
       const { w, h } = getWindowSize('compact', s)
       hudWindow.setSize(w, h)
     }
+    // 言語変更等を HUD に即時反映
+    hudWindow.webContents.send('settings-changed', s)
   }
 })
 ipcMain.handle('set-view-mode', (_e, mode: ViewMode) => switchViewMode(mode))
@@ -346,6 +333,9 @@ ipcMain.handle('open-settings', () => openSettingsWindow())
 ipcMain.handle('close-hud', () => hudWindow?.hide())
 ipcMain.handle('auto-detect-token', () => getTokenFromCredentials())
 ipcMain.handle('open-external', (_e, url: string) => shell.openExternal(url))
+ipcMain.handle('show-login-window', () => claudeWebFetcher.showLoginWindow())
+ipcMain.handle('hide-login-window', () => claudeWebFetcher.hideLoginWindow())
+ipcMain.handle('get-login-status', () => claudeWebFetcher.getLoginStatus())
 
 // ---- App Lifecycle ----
 
@@ -362,8 +352,21 @@ if (!gotTheLock) {
 
   app.whenReady().then(() => {
     app.dock?.hide()
+
+    claudeWebFetcher.setLogCallback(log)
+
+    // ログイン状態が変化したら Settings ウィンドウに通知
+    claudeWebFetcher.setStatusChangeCallback((status) => {
+      log('Login status changed:', status)
+      settingsWindow?.webContents.send('login-status-changed', status)
+    })
+
     createTray()
     scheduleUpdates()
+  })
+
+  app.on('before-quit', () => {
+    claudeWebFetcher.destroy()
   })
 
   app.on('window-all-closed', (e) => { e.preventDefault() })

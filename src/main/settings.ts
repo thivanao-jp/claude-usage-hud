@@ -7,7 +7,8 @@ export type ViewMode = 'compact' | 'detail'
 export interface Settings {
   token: string
   updateIntervalMinutes: number
-  viewMode: ViewMode          // 最後に表示したモード
+  viewMode: ViewMode
+  language: 'auto' | 'en' | 'ja'
   tray: {
     show5h: boolean
     show7d: boolean
@@ -30,8 +31,9 @@ export interface Settings {
 
 const defaultSettings: Settings = {
   token: '',
-  updateIntervalMinutes: 5,
+  updateIntervalMinutes: 10,
   viewMode: 'compact',
+  language: 'auto',
   tray: {
     show5h: true,
     show7d: true,

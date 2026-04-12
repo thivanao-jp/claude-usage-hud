@@ -4,12 +4,14 @@ import {
   Legend, ResponsiveContainer
 } from 'recharts'
 import { HistoryRow } from '../types'
+import { useT } from '../LangContext'
 
 interface Props {
   days: number
 }
 
 export function HistoryChart({ days }: Props) {
+  const t = useT()
   const [data, setData] = useState<HistoryRow[]>([])
 
   useEffect(() => {
@@ -19,7 +21,7 @@ export function HistoryChart({ days }: Props) {
   if (data.length === 0) {
     return (
       <div style={{ color: '#444', fontSize: 11, textAlign: 'center', padding: '12px 0' }}>
-        No history yet. Data accumulates over time.
+        {t('noHistory')}
       </div>
     )
   }

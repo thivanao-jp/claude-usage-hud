@@ -3,19 +3,20 @@ import { DetailView } from './components/DetailView'
 import { CompactView } from './components/CompactView'
 import { SettingsView } from './components/SettingsView'
 import { UsageData, ProfileData, Settings, ViewMode } from './types'
+import { LangContext, useT } from './LangContext'
+import { resolveLang } from './i18n'
 
 const defaultSettings: Settings = {
   token: '',
-  updateIntervalMinutes: 5,
+  updateIntervalMinutes: 10,
   viewMode: 'compact',
+  language: 'auto',
   tray: { show5h: true, show7d: true, showOauth: false, showOpus: false },
   window: { opacity: 90, alwaysOnTop: true },
   alerts: {},
 }
 
-export default function App() {
-  const isSettings = window.location.hash === '#/settings'
-
+function HudApp() {
   const [usage, setUsage] = useState<UsageData | null>(null)
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [settings, setSettings] = useState<Settings>(defaultSettings)
@@ -24,9 +25,6 @@ export default function App() {
   const [isStale, setIsStale] = useState(false)
 
   useEffect(() => {
-    if (isSettings) return
-
-    // 初期データ取得
     window.api.getUsage().then(({ usage, profile }) => {
       if (usage) setUsage(usage)
       if (profile) setProfile(profile)
@@ -36,48 +34,17 @@ export default function App() {
       setMode(s.viewMode ?? 'compact')
     })
 
-    // リアルタイム更新
     const unsubUsage = window.api.onUsageUpdate(({ usage, profile, lastSuccessAt, isStale }) => {
       setUsage(usage)
       setProfile(profile)
       setIsStale(isStale)
       if (lastSuccessAt) setLastSuccessAt(new Date(lastSuccessAt))
     })
-    // メインプロセスからのモード切り替え通知
-    const unsubMode = window.api.onModeChanged((m) => {
-      setMode(m as ViewMode)
-    })
+    const unsubMode = window.api.onModeChanged(m => setMode(m as ViewMode))
+    const unsubSettings = window.api.onSettingsChanged(s => setSettings(s as Settings))
 
-    return () => { unsubUsage(); unsubMode() }
-  }, [isSettings])
-
-  if (isSettings) return <SettingsView />
-
-  // トークン未設定
-  if (!settings.token) {
-    return (
-      <div style={{
-        background: 'rgba(18,18,22,0.93)',
-        borderRadius: 10,
-        padding: 24,
-        textAlign: 'center',
-        color: '#888',
-      }}>
-        <div style={{ fontSize: 26, marginBottom: 10 }}>🤖</div>
-        <div style={{ marginBottom: 6, color: '#e8e8e8', fontWeight: 600 }}>Claude Usage HUD</div>
-        <div style={{ marginBottom: 14, fontSize: 12 }}>Set your API token to start</div>
-        <button
-          onClick={() => window.api.openSettings()}
-          style={{
-            background: '#e05a2b', color: '#fff', border: 'none',
-            borderRadius: 6, padding: '7px 16px', cursor: 'pointer', fontSize: 13,
-          }}
-        >
-          Open Settings
-        </button>
-      </div>
-    )
-  }
+    return () => { unsubUsage(); unsubMode(); unsubSettings() }
+  }, [])
 
   function switchMode(m: ViewMode) {
     setMode(m)
@@ -106,5 +73,33 @@ export default function App() {
       onRefresh={() => window.api.refresh()}
       onSwitchToCompact={() => switchMode('compact')}
     />
+  )
+}
+
+export default function App() {
+  const isSettings = window.location.hash === '#/settings'
+  const [settings, setSettings] = useState<Settings>(defaultSettings)
+
+  useEffect(() => {
+    window.api.getSettings().then(setSettings)
+    // Settings 画面でも言語変更を即時反映
+    const unsub = window.api.onSettingsChanged(s => setSettings(s as Settings))
+    return unsub
+  }, [])
+
+  const lang = resolveLang(settings.language ?? 'auto')
+
+  if (isSettings) {
+    return (
+      <LangContext.Provider value={lang}>
+        <SettingsView onSettingsChange={setSettings} />
+      </LangContext.Provider>
+    )
+  }
+
+  return (
+    <LangContext.Provider value={lang}>
+      <HudApp />
+    </LangContext.Provider>
   )
 }
