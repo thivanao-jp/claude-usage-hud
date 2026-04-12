@@ -3,8 +3,20 @@ import { UsageData, Settings } from '../types'
 interface Props {
   usage: UsageData | null
   settings: Settings
+  lastSuccessAt: Date | null
+  isStale: boolean
   onSwitchToDetail: () => void
   onRefresh: () => void
+}
+
+function formatAge(d: Date | null): string {
+  if (!d) return ''
+  const mins = Math.floor((Date.now() - d.getTime()) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
 }
 
 interface BarItem {
@@ -43,7 +55,7 @@ function formatReset(iso: string | null): { date: string; rel: string } {
   return { date, rel: rel.trim() }
 }
 
-export function CompactView({ usage, settings, onSwitchToDetail, onRefresh }: Props) {
+export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchToDetail, onRefresh }: Props) {
   const visibleBars = BAR_ITEMS.filter(item => {
     if (item.key === 'five_hour')            return settings.tray.show5h
     if (item.key === 'seven_day')            return settings.tray.show7d
@@ -67,27 +79,26 @@ export function CompactView({ usage, settings, onSwitchToDetail, onRefresh }: Pr
       {/* Button strip */}
       <div style={{
         display: 'flex',
-        justifyContent: 'flex-end',
+        justifyContent: 'space-between',
         alignItems: 'center',
         height: 24,
         padding: '0 6px',
-        gap: 4,
         WebkitAppRegion: 'drag' as any,
       }}>
-        <button
-          onClick={onRefresh}
-          title="Refresh"
-          style={iconBtnStyle}
-        >
-          ↻
-        </button>
-        <button
-          onClick={onSwitchToDetail}
-          title="Detail view"
-          style={iconBtnStyle}
-        >
-          ⊞
-        </button>
+        {/* stale インジケーター */}
+        <div style={{
+          fontSize: 10,
+          color: isStale ? '#e0a12b' : '#3a3a3a',
+          WebkitAppRegion: 'drag' as any,
+        }}>
+          {isStale
+            ? `⚠ ${lastSuccessAt ? formatAge(lastSuccessAt) : 'stale'}`
+            : lastSuccessAt ? formatAge(lastSuccessAt) : ''}
+        </div>
+        <div style={{ display: 'flex', gap: 4, WebkitAppRegion: 'no-drag' as any }}>
+          <button onClick={onRefresh} title="Refresh" style={iconBtnStyle}>↻</button>
+          <button onClick={onSwitchToDetail} title="Detail view" style={iconBtnStyle}>⊞</button>
+        </div>
       </div>
 
       {/* Bars */}

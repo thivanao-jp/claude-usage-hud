@@ -12,7 +12,7 @@ import {
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { loadSettings, saveSettings, Settings, ViewMode } from './settings'
-import { fetchUsage, fetchProfile, UsageData, ProfileData } from './claudeApi'
+import { fetchUsage, fetchProfile, UsageData, ProfileData, ApiError } from './claudeApi'
 import { saveUsageHistory, getUsageHistory } from './db'
 import { getTokenFromCredentials } from './credentials'
 
@@ -20,8 +20,19 @@ let tray: Tray | null = null
 let hudWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
 let updateTimer: ReturnType<typeof setInterval> | null = null
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+
 let lastUsage: UsageData | null = null
 let lastProfile: ProfileData | null = null
+let lastSuccessAt: Date | null = null   // 最後に成功した時刻
+let retryCount = 0                      // 連続失敗回数
+
+// 指数バックオフ: 30s → 1m → 2m → 4m → 8m → 16m → 30m (上限)
+const BACKOFF_BASE_MS = 30 * 1000
+const BACKOFF_MAX_MS  = 30 * 60 * 1000
+function nextBackoffMs(): number {
+  return Math.min(BACKOFF_BASE_MS * Math.pow(2, retryCount), BACKOFF_MAX_MS)
+}
 
 // ---- Display Helper ----
 
@@ -171,7 +182,7 @@ function createTray(): void {
   tray.on('right-click', () => tray!.popUpContextMenu(contextMenu))
 }
 
-function updateTrayTitle(usage: UsageData, settings: Settings): void {
+function updateTrayTitle(usage: UsageData, settings: Settings, isStale: boolean): void {
   if (!tray) return
   const parts: string[] = []
   if (settings.tray.show5h && usage.five_hour)
@@ -182,7 +193,9 @@ function updateTrayTitle(usage: UsageData, settings: Settings): void {
     parts.push(`oa:${Math.round(usage.seven_day_oauth_apps.utilization)}%`)
   if (settings.tray.showOpus && usage.seven_day_opus)
     parts.push(`op:${Math.round(usage.seven_day_opus.utilization)}%`)
-  tray.setTitle(parts.length > 0 ? parts.join(' ') : '--')
+  // staleのとき末尾に ~ をつけて古いデータであることを示す
+  const title = parts.length > 0 ? parts.join(' ') + (isStale ? '~' : '') : '--'
+  tray.setTitle(title)
 }
 
 // ---- Settings Window ----
@@ -219,6 +232,16 @@ function openSettingsWindow(): void {
 
 // ---- Data Update ----
 
+function sendToHud(isStale: boolean): void {
+  if (!hudWindow || hudWindow.isDestroyed()) return
+  hudWindow.webContents.send('usage-update', {
+    usage: lastUsage,
+    profile: lastProfile,
+    lastSuccessAt: lastSuccessAt?.toISOString() ?? null,
+    isStale,
+  })
+}
+
 async function doUpdate(): Promise<void> {
   const settings = loadSettings()
   if (!settings.token) return
@@ -226,29 +249,54 @@ async function doUpdate(): Promise<void> {
   try {
     const [usage, profile] = await Promise.all([
       fetchUsage(settings.token),
-      fetchProfile(settings.token)
+      lastProfile ? Promise.resolve(lastProfile) : fetchProfile(settings.token)
     ])
+
+    // プロフィールは変化しないので成功時のみ更新
+    if (!lastProfile) lastProfile = profile
+
     lastUsage = usage
-    lastProfile = profile
+    lastSuccessAt = new Date()
+    retryCount = 0  // 成功したのでリセット
 
     saveUsageHistory(usage)
-    updateTrayTitle(usage, settings)
+    updateTrayTitle(usage, settings, false)
     checkAlerts(usage, settings)
+    sendToHud(false)
 
-    if (hudWindow && !hudWindow.isDestroyed()) {
-      hudWindow.webContents.send('usage-update', { usage, profile })
-    }
   } catch (err) {
-    console.error('Update failed:', err)
-    if (tray) tray.setTitle('ERR')
+    const isRateLimit = err instanceof ApiError && err.isRateLimit
+    console.warn(`Update failed (${isRateLimit ? '429 rate limit' : 'error'}):`, err)
+
+    if (isRateLimit) {
+      retryCount++
+      const delay = nextBackoffMs()
+      console.log(`Retry #${retryCount} in ${Math.round(delay / 1000)}s`)
+      // 既存のリトライタイマーをキャンセルして再スケジュール
+      if (retryTimer) clearTimeout(retryTimer)
+      retryTimer = setTimeout(doUpdate, delay)
+    }
+
+    // キャッシュデータがあれば stale 表示、なければ '--'
+    if (lastUsage) {
+      updateTrayTitle(lastUsage, settings, true)
+      sendToHud(true)
+    } else {
+      if (tray) tray.setTitle('--')
+    }
   }
 }
 
 function scheduleUpdates(): void {
   if (updateTimer) clearInterval(updateTimer)
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
+  retryCount = 0
+
   const settings = loadSettings()
   const intervalMs = (settings.updateIntervalMinutes ?? 5) * 60 * 1000
-  doUpdate()
+
+  // 起動直後の即時呼び出しは429になりやすいので3秒後に初回実行
+  setTimeout(doUpdate, 3000)
   updateTimer = setInterval(doUpdate, intervalMs)
 }
 

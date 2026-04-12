@@ -6,8 +6,20 @@ import { HistoryChart } from './HistoryChart'
 interface Props {
   usage: UsageData | null
   profile: ProfileData | null
+  lastSuccessAt: Date | null
+  isStale: boolean
   onSwitchToCompact: () => void
   onRefresh: () => void
+}
+
+function formatAge(d: Date | null): string {
+  if (!d) return ''
+  const mins = Math.floor((Date.now() - d.getTime()) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
 }
 
 function planLabel(p: ProfileData): string {
@@ -18,7 +30,7 @@ function planLabel(p: ProfileData): string {
   return tier || 'Unknown'
 }
 
-export function DetailView({ usage, profile, onSwitchToCompact, onRefresh }: Props) {
+export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToCompact, onRefresh }: Props) {
   const [showChart, setShowChart] = useState(false)
   const [chartDays, setChartDays] = useState(7)
 
@@ -136,8 +148,26 @@ export function DetailView({ usage, profile, onSwitchToCompact, onRefresh }: Pro
       </div>
 
       {/* Footer */}
-      <div style={{ padding: '2px 14px 6px', fontSize: 10, color: '#3a3a3a', textAlign: 'right' }}>
-        Updated {lastUpdated}
+      <div style={{
+        padding: '4px 12px 6px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        fontSize: 10,
+      }}>
+        {isStale ? (
+          <span style={{ color: '#e0a12b' }}>
+            ⚠ Stale data — last success: {lastSuccessAt
+              ? `${lastSuccessAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${formatAge(lastSuccessAt)})`
+              : 'unknown'}
+          </span>
+        ) : (
+          <span style={{ color: '#3a3a3a' }}>
+            {lastSuccessAt
+              ? `Updated ${lastSuccessAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${formatAge(lastSuccessAt)})`
+              : `Updated ${lastUpdated}`}
+          </span>
+        )}
       </div>
     </div>
   )

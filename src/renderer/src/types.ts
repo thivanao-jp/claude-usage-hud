@@ -70,7 +70,12 @@ declare global {
       closeHud: () => Promise<void>
       autoDetectToken: () => Promise<string | null>
       openExternal: (url: string) => Promise<void>
-      onUsageUpdate: (cb: (data: { usage: UsageData; profile: ProfileData }) => void) => () => void
+      onUsageUpdate: (cb: (data: {
+        usage: UsageData
+        profile: ProfileData
+        lastSuccessAt: string | null
+        isStale: boolean
+      }) => void) => () => void
       onModeChanged: (cb: (mode: string) => void) => () => void
     }
   }

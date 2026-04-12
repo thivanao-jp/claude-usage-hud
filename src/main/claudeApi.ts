@@ -26,6 +26,18 @@ export interface ProfileData {
   }
 }
 
+/** APIエラー（429かどうか判別できる） */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+  get isRateLimit(): boolean { return this.status === 429 }
+}
+
 function headers(token: string): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
@@ -36,12 +48,12 @@ function headers(token: string): Record<string, string> {
 
 export async function fetchUsage(token: string): Promise<UsageData> {
   const res = await fetch(`${BASE}/api/oauth/usage`, { headers: headers(token) })
-  if (!res.ok) throw new Error(`Usage API ${res.status}: ${await res.text()}`)
+  if (!res.ok) throw new ApiError(`Usage API ${res.status}: ${await res.text()}`, res.status)
   return res.json() as Promise<UsageData>
 }
 
 export async function fetchProfile(token: string): Promise<ProfileData> {
   const res = await fetch(`${BASE}/api/oauth/profile`, { headers: headers(token) })
-  if (!res.ok) throw new Error(`Profile API ${res.status}: ${await res.text()}`)
+  if (!res.ok) throw new ApiError(`Profile API ${res.status}: ${await res.text()}`, res.status)
   return res.json() as Promise<ProfileData>
 }

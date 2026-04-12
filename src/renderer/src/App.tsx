@@ -20,6 +20,8 @@ export default function App() {
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [settings, setSettings] = useState<Settings>(defaultSettings)
   const [mode, setMode] = useState<ViewMode>('compact')
+  const [lastSuccessAt, setLastSuccessAt] = useState<Date | null>(null)
+  const [isStale, setIsStale] = useState(false)
 
   useEffect(() => {
     if (isSettings) return
@@ -35,9 +37,11 @@ export default function App() {
     })
 
     // リアルタイム更新
-    const unsubUsage = window.api.onUsageUpdate(({ usage, profile }) => {
+    const unsubUsage = window.api.onUsageUpdate(({ usage, profile, lastSuccessAt, isStale }) => {
       setUsage(usage)
       setProfile(profile)
+      setIsStale(isStale)
+      if (lastSuccessAt) setLastSuccessAt(new Date(lastSuccessAt))
     })
     // メインプロセスからのモード切り替え通知
     const unsubMode = window.api.onModeChanged((m) => {
@@ -85,6 +89,8 @@ export default function App() {
       <CompactView
         usage={usage}
         settings={settings}
+        lastSuccessAt={lastSuccessAt}
+        isStale={isStale}
         onRefresh={() => window.api.refresh()}
         onSwitchToDetail={() => switchMode('detail')}
       />
@@ -95,6 +101,8 @@ export default function App() {
     <DetailView
       usage={usage}
       profile={profile}
+      lastSuccessAt={lastSuccessAt}
+      isStale={isStale}
       onRefresh={() => window.api.refresh()}
       onSwitchToCompact={() => switchMode('compact')}
     />
