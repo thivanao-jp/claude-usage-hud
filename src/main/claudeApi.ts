@@ -18,6 +18,7 @@ export interface UsageData {
   seven_day: UsageEntry | null
   seven_day_oauth_apps: UsageEntry | null
   seven_day_opus: UsageEntry | null
+  seven_day_sonnet: UsageEntry | null
   extra_usage: ExtraUsage | null
 }
 

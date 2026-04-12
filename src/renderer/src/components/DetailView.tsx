@@ -18,10 +18,14 @@ function planLabel(p: ProfileData, usage?: UsageData | null): string {
   const tier = (p.organization?.rate_limit_tier ?? '').toLowerCase()
 
   // tier 文字列マッチ（大文字小文字・命名規則の違いを吸収）
-  if (tier.includes('5x'))   return 'Max 5x'
-  if (tier.includes('max'))  return 'Max'
-  if (tier.includes('pro'))  return 'Pro'
-  if (tier.includes('free')) return 'Free'
+  if (tier.includes('5x'))          return 'Max 5x'
+  if (tier.includes('max'))         return 'Max'
+  if (tier.includes('enterprise'))  return 'Enterprise'
+  if (tier.includes('raven'))       return 'Team'   // default_raven = Team Premium
+  if (tier.includes('team'))        return 'Team'
+  if (tier.includes('business'))    return 'Business'
+  if (tier.includes('pro'))         return 'Pro'
+  if (tier.includes('free'))        return 'Free'
 
   // API フラグによる判定
   if (p.account?.has_claude_max) return 'Max'
@@ -117,6 +121,9 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
             )}
             {usage.seven_day_opus && (
               <UsageCard label={t('label7dOpus')} description={t('desc7dOpus')} entry={usage.seven_day_opus} color="#b07aee" />
+            )}
+            {usage.seven_day_sonnet && (
+              <UsageCard label={t('label7dSonnet')} description={t('desc7dSonnet')} entry={usage.seven_day_sonnet} color="#e07aaa" />
             )}
             {usage.extra_usage?.is_enabled && (
               <ExtraUsageCard extra={usage.extra_usage} />

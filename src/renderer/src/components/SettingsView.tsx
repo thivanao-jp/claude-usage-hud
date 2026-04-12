@@ -9,7 +9,7 @@ const defaultSettings: Settings = {
   viewMode: 'compact',
   language: 'auto',
   theme: 'auto',
-  tray: { show5h: true, show7d: true, showOauth: false, showOpus: false, showExtra: false },
+  tray: { show5h: true, show7d: true, showOauth: false, showOpus: false, showSonnet: false, showExtra: false },
   window: { opacity: 90, alwaysOnTop: true },
   alerts: {},
 }
@@ -132,8 +132,9 @@ export function SettingsView({ onSettingsChange }: Props) {
           <CheckRow label={t('show5h')}    checked={s.tray.show5h}    onChange={v => upd(p => ({ ...p, tray: { ...p.tray, show5h: v } }))}    th={th} />
           <CheckRow label={t('show7d')}    checked={s.tray.show7d}    onChange={v => upd(p => ({ ...p, tray: { ...p.tray, show7d: v } }))}    th={th} />
           <CheckRow label={t('showOauth')} checked={s.tray.showOauth} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showOauth: v } }))} th={th} />
-          <CheckRow label={t('showOpus')}  checked={s.tray.showOpus}  onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showOpus: v } }))}  th={th} />
-          <CheckRow label={t('showExtra')} checked={s.tray.showExtra ?? false} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showExtra: v } }))} th={th} />
+          <CheckRow label={t('showOpus')}   checked={s.tray.showOpus}         onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showOpus: v } }))}   th={th} />
+          <CheckRow label={t('showSonnet')} checked={s.tray.showSonnet ?? false} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showSonnet: v } }))} th={th} />
+          <CheckRow label={t('showExtra')}  checked={s.tray.showExtra ?? false}  onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showExtra: v } }))}  th={th} />
         </div>
       </Section>
 
@@ -200,6 +201,13 @@ export function SettingsView({ onSettingsChange }: Props) {
             label={`${t('alertLabel7dOpus')} ${t('alertsPct')}`}
             value={s.alerts.seven_day_opus}
             onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, seven_day_opus: v } }))}
+            inputStyle={inputStyle}
+            th={th}
+          />
+          <AlertThreshold
+            label={`${t('alertLabel7dSonnet')} ${t('alertsPct')}`}
+            value={s.alerts.seven_day_sonnet}
+            onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, seven_day_sonnet: v } }))}
             inputStyle={inputStyle}
             th={th}
           />

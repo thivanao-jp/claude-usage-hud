@@ -16,7 +16,8 @@ function db(): Database.Database {
       five_hour   REAL,
       seven_day   REAL,
       seven_day_oauth_apps REAL,
-      seven_day_opus       REAL
+      seven_day_opus       REAL,
+      seven_day_sonnet     REAL
     );
     CREATE INDEX IF NOT EXISTS idx_recorded_at ON usage_history(recorded_at);
   `)
@@ -25,20 +26,24 @@ function db(): Database.Database {
   if (!cols.includes('extra_usage')) {
     _db.exec('ALTER TABLE usage_history ADD COLUMN extra_usage REAL;')
   }
+  if (!cols.includes('seven_day_sonnet')) {
+    _db.exec('ALTER TABLE usage_history ADD COLUMN seven_day_sonnet REAL;')
+  }
   return _db
 }
 
 export function saveUsageHistory(usage: UsageData): void {
   db()
     .prepare(
-      `INSERT INTO usage_history (five_hour, seven_day, seven_day_oauth_apps, seven_day_opus, extra_usage)
-       VALUES (?, ?, ?, ?, ?)`
+      `INSERT INTO usage_history (five_hour, seven_day, seven_day_oauth_apps, seven_day_opus, seven_day_sonnet, extra_usage)
+       VALUES (?, ?, ?, ?, ?, ?)`
     )
     .run(
       usage.five_hour?.utilization ?? null,
       usage.seven_day?.utilization ?? null,
       usage.seven_day_oauth_apps?.utilization ?? null,
       usage.seven_day_opus?.utilization ?? null,
+      usage.seven_day_sonnet?.utilization ?? null,
       usage.extra_usage?.utilization ?? null
     )
 }
@@ -49,13 +54,14 @@ export interface HistoryRow {
   seven_day: number | null
   seven_day_oauth_apps: number | null
   seven_day_opus: number | null
+  seven_day_sonnet: number | null
   extra_usage: number | null
 }
 
 export function getUsageHistory(days: number): HistoryRow[] {
   return db()
     .prepare(
-      `SELECT recorded_at, five_hour, seven_day, seven_day_oauth_apps, seven_day_opus, extra_usage
+      `SELECT recorded_at, five_hour, seven_day, seven_day_oauth_apps, seven_day_opus, seven_day_sonnet, extra_usage
        FROM usage_history
        WHERE recorded_at >= datetime('now', ?)
        ORDER BY recorded_at ASC`
