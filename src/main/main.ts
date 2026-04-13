@@ -10,16 +10,21 @@ import {
   screen
 } from 'electron'
 import { join } from 'path'
-import { appendFileSync } from 'fs'
+import { appendFileSync, mkdirSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
 import { loadSettings, saveSettings, Settings, ViewMode } from './settings'
 import { UsageData, ProfileData } from './claudeApi'
 import { saveUsageHistory, getUsageHistory } from './db'
 import { getTokenFromCredentials } from './credentials'
 import { ClaudeWebFetcher } from './claudeWebFetcher'
+import { createBarIcon } from './trayIcon'
 
 // stdoutがバッファリングされることがあるため、ログは直接ファイルに書き込む
-const LOG_PATH = join(process.env['HOME'] ?? '', 'Library/Logs/claude-usage-hud.log')
+// app.getPath('logs') はプラットフォームに応じた適切なディレクトリを返す
+// macOS: ~/Library/Logs/<appName>/  Windows: %APPDATA%\<appName>\logs\
+const LOG_DIR = app.getPath('logs')
+const LOG_PATH = join(LOG_DIR, 'claude-usage-hud.log')
+try { mkdirSync(LOG_DIR, { recursive: true }) } catch {}
 function log(...args: unknown[]): void {
   const line = `[${new Date().toISOString()}] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}\n`
   try { appendFileSync(LOG_PATH, line) } catch {}
@@ -204,7 +209,6 @@ function createTray(): void {
     : join(process.resourcesPath, 'resources', 'tray-icon.png')
   const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
   tray = new Tray(icon)
-  tray.setTitle('--')
   tray.setToolTip('Claude Usage HUD')
 
   const contextMenu = Menu.buildFromTemplate([
@@ -222,20 +226,45 @@ function createTray(): void {
   tray.on('right-click', () => tray!.popUpContextMenu(contextMenu))
 }
 
-function updateTrayTitle(usage: UsageData, settings: Settings, isStale: boolean): void {
+function updateTray(usage: UsageData, settings: Settings, isStale: boolean): void {
   if (!tray) return
-  const parts: string[] = []
-  if (settings.tray.show5h && usage.five_hour)
-    parts.push(`5h:${Math.round(usage.five_hour.utilization)}%`)
-  if (settings.tray.show7d && usage.seven_day)
-    parts.push(`7d:${Math.round(usage.seven_day.utilization)}%`)
-  if (settings.tray.showOauth && usage.seven_day_oauth_apps)
-    parts.push(`oa:${Math.round(usage.seven_day_oauth_apps.utilization)}%`)
-  if (settings.tray.showOpus && usage.seven_day_opus)
-    parts.push(`op:${Math.round(usage.seven_day_opus.utilization)}%`)
-  // staleのとき末尾に ~ をつけて古いデータであることを示す
-  const title = parts.length > 0 ? parts.join(' ') + (isStale ? '~' : '') : '--'
-  tray.setTitle(title)
+
+  // Windows: バーチャートアイコンを動的生成
+  // macOS:  setTitle() でメニューバーにテキスト表示（setImage は機能しない）
+  if (process.platform === 'win32') {
+    const icon = createBarIcon(usage, settings, isStale)
+    if (!icon.isEmpty()) tray.setImage(icon)
+    // ツールチップに数値を表示
+    const parts: string[] = []
+    if (settings.tray.show5h && usage.five_hour)
+      parts.push(`5h: ${Math.round(usage.five_hour.utilization)}%`)
+    if (settings.tray.show7d && usage.seven_day)
+      parts.push(`7d: ${Math.round(usage.seven_day.utilization)}%`)
+    if (settings.tray.showOauth && usage.seven_day_oauth_apps)
+      parts.push(`OAuth: ${Math.round(usage.seven_day_oauth_apps.utilization)}%`)
+    if (settings.tray.showOpus && usage.seven_day_opus)
+      parts.push(`Opus: ${Math.round(usage.seven_day_opus.utilization)}%`)
+    if (settings.tray.showSonnet && usage.seven_day_sonnet)
+      parts.push(`Sonnet: ${Math.round(usage.seven_day_sonnet.utilization)}%`)
+    const tip = parts.length > 0
+      ? `Claude Usage HUD${isStale ? ' ⚠' : ''}\n${parts.join('\n')}`
+      : 'Claude Usage HUD'
+    tray.setToolTip(tip)
+  } else {
+    // macOS: メニューバーにテキスト表示
+    const parts: string[] = []
+    if (settings.tray.show5h && usage.five_hour)
+      parts.push(`5h:${Math.round(usage.five_hour.utilization)}%`)
+    if (settings.tray.show7d && usage.seven_day)
+      parts.push(`7d:${Math.round(usage.seven_day.utilization)}%`)
+    if (settings.tray.showOauth && usage.seven_day_oauth_apps)
+      parts.push(`oa:${Math.round(usage.seven_day_oauth_apps.utilization)}%`)
+    if (settings.tray.showOpus && usage.seven_day_opus)
+      parts.push(`op:${Math.round(usage.seven_day_opus.utilization)}%`)
+    if (settings.tray.showSonnet && usage.seven_day_sonnet)
+      parts.push(`snt:${Math.round(usage.seven_day_sonnet.utilization)}%`)
+    tray.setTitle(parts.length > 0 ? parts.join(' ') + (isStale ? '~' : '') : '--')
+  }
 }
 
 // ---- Settings Window ----
@@ -292,7 +321,7 @@ async function doUpdate(): Promise<void> {
       if (webResult.profile) lastProfile = webResult.profile
       lastSuccessAt = new Date()
       saveUsageHistory(webResult.usage)
-      updateTrayTitle(webResult.usage, settings, false)
+      updateTray(webResult.usage, settings, false)
       checkAlerts(webResult.usage, settings)
       sendToHud(false)
       log('doUpdate: web fetch OK')
@@ -305,10 +334,10 @@ async function doUpdate(): Promise<void> {
 
   // データ取得失敗: キャッシュがあれば stale 表示
   if (lastUsage) {
-    updateTrayTitle(lastUsage, settings, true)
+    updateTray(lastUsage, settings, true)
     sendToHud(true)
   } else {
-    tray?.setTitle('--')
+    if (process.platform !== 'win32') tray?.setTitle('--')
   }
 }
 
@@ -331,6 +360,7 @@ function checkAlerts(usage: UsageData, settings: Settings): void {
     ['seven_day',            '7-day'],
     ['seven_day_oauth_apps', '7-day OAuth Apps'],
     ['seven_day_opus',       '7-day Opus'],
+    ['seven_day_sonnet',     '7-day Sonnet'],
   ]
   for (const [key, label] of checks) {
     const entry = usage[key as keyof UsageData]

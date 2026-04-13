@@ -15,6 +15,7 @@ export interface Settings {
     show7d: boolean
     showOauth: boolean
     showOpus: boolean
+    showSonnet: boolean
     showExtra: boolean
   }
   window: {
@@ -30,6 +31,7 @@ export interface Settings {
     seven_day?: number
     seven_day_oauth_apps?: number
     seven_day_opus?: number
+    seven_day_sonnet?: number
     extra_usage?: number
   }
 }
@@ -45,6 +47,7 @@ const defaultSettings: Settings = {
     show7d: true,
     showOauth: false,
     showOpus: false,
+    showSonnet: false,
     showExtra: false,
   },
   window: {

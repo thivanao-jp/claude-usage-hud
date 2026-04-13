@@ -202,6 +202,10 @@ export class ClaudeWebFetcher {
     const usage = mapUsage(raw.usage)
     const profile = mapProfile(raw.account, raw.orgUuid)
 
+    // プラン診断ログ（Team/Enterprise など非標準プランのデバッグ用）
+    this.log('fetchData: rate_limit_tier=', (raw.account as Record<string, unknown>)?.['rate_limit_tier'])
+    this.log('fetchData: raw_usage=', JSON.stringify(raw.usage, null, 2))
+
     return { usage, profile, loginStatus: 'logged-in' }
   }
 
@@ -257,14 +261,16 @@ function mapUsage(raw: unknown): UsageData | null {
     : r
 
   // extra_usage は構造が異なるので個別にマッピング
+  // monthly_limit=0 かつ utilization=null はプランが extra_usage 未設定の状態なので null 扱い
   const extraRaw = r['extra_usage']
   let extra_usage = null
   if (extraRaw && typeof extraRaw === 'object') {
     const e = extraRaw as Record<string, unknown>
-    if (e['is_enabled']) {
+    const monthlyLimit = Number(e['monthly_limit'] ?? 0)
+    if (e['is_enabled'] && monthlyLimit > 0) {
       extra_usage = {
         is_enabled: Boolean(e['is_enabled']),
-        monthly_limit: Number(e['monthly_limit'] ?? 0),
+        monthly_limit: monthlyLimit,
         used_credits: Number(e['used_credits'] ?? 0),
         utilization: Number(e['utilization'] ?? 0),
       }
@@ -276,6 +282,7 @@ function mapUsage(raw: unknown): UsageData | null {
     seven_day: entry(src, 'seven_day'),
     seven_day_oauth_apps: entry(src, 'seven_day_oauth_apps'),
     seven_day_opus: entry(src, 'seven_day_opus'),
+    seven_day_sonnet: entry(r, 'seven_day_sonnet'),
     extra_usage,
   }
 

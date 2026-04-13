@@ -22,6 +22,7 @@ const BAR_ITEMS: BarItem[] = [
   { key: 'seven_day',            label: '7D',   color: '#54c98e' },
   { key: 'seven_day_oauth_apps', label: 'OA',   color: '#e0a12b' },
   { key: 'seven_day_opus',       label: 'Opus', color: '#b07aee' },
+  { key: 'seven_day_sonnet',     label: 'Snt',  color: '#e07aaa' },
 ]
 
 interface RelTime {
@@ -68,6 +69,7 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
     if (item.key === 'seven_day')            return settings.tray.show7d
     if (item.key === 'seven_day_oauth_apps') return settings.tray.showOauth
     if (item.key === 'seven_day_opus')       return settings.tray.showOpus
+    if (item.key === 'seven_day_sonnet')     return settings.tray.showSonnet ?? false
     return false
   })
   const showExtraBar = settings.tray.showExtra

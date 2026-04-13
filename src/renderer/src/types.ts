@@ -15,6 +15,7 @@ export interface UsageData {
   seven_day: UsageEntry | null
   seven_day_oauth_apps: UsageEntry | null
   seven_day_opus: UsageEntry | null
+  seven_day_sonnet: UsageEntry | null
   extra_usage: ExtraUsage | null
 }
 
@@ -44,6 +45,7 @@ export interface Settings {
     show7d: boolean
     showOauth: boolean
     showOpus: boolean
+    showSonnet: boolean
     showExtra: boolean
   }
   window: {
@@ -59,6 +61,7 @@ export interface Settings {
     seven_day?: number
     seven_day_oauth_apps?: number
     seven_day_opus?: number
+    seven_day_sonnet?: number
     extra_usage?: number
   }
 }
@@ -69,6 +72,7 @@ export interface HistoryRow {
   seven_day: number | null
   seven_day_oauth_apps: number | null
   seven_day_opus: number | null
+  seven_day_sonnet: number | null
   extra_usage: number | null
 }
 
