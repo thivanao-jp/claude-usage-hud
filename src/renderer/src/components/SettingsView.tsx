@@ -12,6 +12,7 @@ const defaultSettings: Settings = {
   tray: { show5h: true, show7d: true, showOauth: false, showOpus: false, showSonnet: false, showExtra: false },
   window: { opacity: 90, alwaysOnTop: true },
   alerts: {},
+  pace: { workHoursOnly: false, workDayStart: 5, workDayEnd: 22, excludeWeekends: true },
 }
 
 interface Props {
@@ -220,6 +221,53 @@ export function SettingsView({ onSettingsChange }: Props) {
           />
         </div>
         <div style={{ fontSize: 11, color: th.textFaint2, marginTop: 6 }}>{t('alertsHint')}</div>
+      </Section>
+
+      {/* Pace Indicator */}
+      <Section title={t('sectionPace')} th={th}>
+        <CheckRow
+          label={t('paceWorkHoursOnly')}
+          checked={s.pace?.workHoursOnly ?? false}
+          onChange={v => upd(p => ({ ...p, pace: { ...p.pace, workHoursOnly: v } }))}
+          th={th}
+        />
+        {s.pace?.workHoursOnly && (
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <CheckRow
+              label={t('paceExcludeWeekends')}
+              checked={s.pace?.excludeWeekends ?? true}
+              onChange={v => upd(p => ({ ...p, pace: { ...p.pace, excludeWeekends: v } }))}
+              th={th}
+            />
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <div>
+                <Label th={th}>{t('paceWorkDayStart')}</Label>
+                <select
+                  value={s.pace?.workDayStart ?? 5}
+                  onChange={e => upd(p => ({ ...p, pace: { ...p.pace, workDayStart: Number(e.target.value) } }))}
+                  style={{ ...inputStyle, width: 'auto' }}
+                >
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <option key={i} value={i}>{`${i}:00`}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label th={th}>{t('paceWorkDayEnd')}</Label>
+                <select
+                  value={s.pace?.workDayEnd ?? 22}
+                  onChange={e => upd(p => ({ ...p, pace: { ...p.pace, workDayEnd: Number(e.target.value) } }))}
+                  style={{ ...inputStyle, width: 'auto' }}
+                >
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <option key={i} value={i}>{`${i}:00`}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: th.textFaint2, marginTop: 6 }}>{t('paceHint')}</div>
       </Section>
 
       {/* Save */}

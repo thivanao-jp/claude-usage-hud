@@ -34,6 +34,12 @@ export interface Settings {
     seven_day_sonnet?: number
     extra_usage?: number
   }
+  pace: {
+    workHoursOnly: boolean
+    workDayStart: number   // 0-23
+    workDayEnd: number     // 0-23
+    excludeWeekends: boolean
+  }
 }
 
 const defaultSettings: Settings = {
@@ -54,7 +60,13 @@ const defaultSettings: Settings = {
     opacity: 90,
     alwaysOnTop: true
   },
-  alerts: {}
+  alerts: {},
+  pace: {
+    workHoursOnly: false,
+    workDayStart: 5,
+    workDayEnd: 22,
+    excludeWeekends: true,
+  },
 }
 
 function settingsPath(): string {
@@ -74,6 +86,7 @@ export function loadSettings(): Settings {
       tray:   { ...defaultSettings.tray,   ...(saved.tray   ?? {}) },
       window: { ...defaultSettings.window, ...(saved.window ?? {}) },
       alerts: { ...defaultSettings.alerts, ...(saved.alerts ?? {}) },
+      pace:   { ...defaultSettings.pace,   ...(saved.pace   ?? {}) },
     }
   } catch {
     return { ...defaultSettings }

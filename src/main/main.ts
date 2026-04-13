@@ -69,7 +69,7 @@ function isPositionOnSomeDisplay(x: number, y: number): boolean {
 const DETAIL_W = 360
 const DETAIL_H = 580
 const COMPACT_W = 320
-const COMPACT_BAR_H = 42   // 1本のバーの高さ
+const COMPACT_BAR_H = 46   // 1本のバーの高さ（ペースライン含む）
 const COMPACT_BTN_H = 28   // ボタン行の高さ
 const COMPACT_PAD = 8      // 上下パディング合計
 
@@ -79,6 +79,7 @@ function getCompactHeight(settings: Settings): number {
     settings.tray.show7d,
     settings.tray.showOauth,
     settings.tray.showOpus,
+    settings.tray.showSonnet,
     settings.tray.showExtra,
   ].filter(Boolean).length || 1
   return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD
@@ -283,6 +284,7 @@ function openSettingsWindow(): void {
     y,
     title: 'Settings',
     backgroundColor: '#1a1a1f',
+    autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/preload.js'),
       contextIsolation: true,

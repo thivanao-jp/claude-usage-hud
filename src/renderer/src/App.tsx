@@ -14,9 +14,10 @@ const defaultSettings: Settings = {
   viewMode: 'compact',
   language: 'auto',
   theme: 'auto',
-  tray: { show5h: true, show7d: true, showOauth: false, showOpus: false, showExtra: false },
+  tray: { show5h: true, show7d: true, showOauth: false, showOpus: false, showSonnet: false, showExtra: false },
   window: { opacity: 90, alwaysOnTop: true },
   alerts: {},
+  pace: { workHoursOnly: false, workDayStart: 5, workDayEnd: 22, excludeWeekends: true },
 }
 
 function useResolvedTheme(themeSetting: ThemeSetting): ThemeTokens {
@@ -87,6 +88,7 @@ function HudApp() {
     <DetailView
       usage={usage}
       profile={profile}
+      settings={settings}
       lastSuccessAt={lastSuccessAt}
       isStale={isStale}
       onRefresh={() => window.api.refresh()}

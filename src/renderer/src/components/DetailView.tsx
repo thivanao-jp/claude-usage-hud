@@ -1,13 +1,17 @@
 import { useState } from 'react'
-import { UsageData, ProfileData, ExtraUsage } from '../types'
+import { UsageData, ProfileData, ExtraUsage, Settings } from '../types'
 import { UsageCard } from './UsageCard'
 import { HistoryChart } from './HistoryChart'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 
+const HOUR = 60 * 60 * 1000
+const DAY  = 24 * HOUR
+
 interface Props {
   usage: UsageData | null
   profile: ProfileData | null
+  settings: Settings
   lastSuccessAt: Date | null
   isStale: boolean
   onSwitchToCompact: () => void
@@ -41,7 +45,7 @@ function planLabel(p: ProfileData, usage?: UsageData | null): string {
   return raw ? raw.split('_').slice(0, 2).join(' ') : '?'
 }
 
-export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToCompact, onRefresh }: Props) {
+export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, onSwitchToCompact, onRefresh }: Props) {
   const t = useT()
   const th = useTheme()
   const [showChart, setShowChart] = useState(false)
@@ -111,19 +115,19 @@ export function DetailView({ usage, profile, lastSuccessAt, isStale, onSwitchToC
         {usage ? (
           <>
             {usage.five_hour && (
-              <UsageCard label={t('label5h')} description={t('desc5h')} entry={usage.five_hour} color="#4a9eff" />
+              <UsageCard label={t('label5h')} description={t('desc5h')} entry={usage.five_hour} color="#4a9eff" periodMs={5 * HOUR} paceSettings={settings.pace} />
             )}
             {usage.seven_day && (
-              <UsageCard label={t('label7d')} description={t('desc7d')} entry={usage.seven_day} color="#54c98e" />
+              <UsageCard label={t('label7d')} description={t('desc7d')} entry={usage.seven_day} color="#54c98e" periodMs={7 * DAY} paceSettings={settings.pace} />
             )}
             {usage.seven_day_oauth_apps && (
-              <UsageCard label={t('label7dOauth')} description={t('desc7dOauth')} entry={usage.seven_day_oauth_apps} color="#e0a12b" highlight />
+              <UsageCard label={t('label7dOauth')} description={t('desc7dOauth')} entry={usage.seven_day_oauth_apps} color="#e0a12b" highlight periodMs={7 * DAY} paceSettings={settings.pace} />
             )}
             {usage.seven_day_opus && (
-              <UsageCard label={t('label7dOpus')} description={t('desc7dOpus')} entry={usage.seven_day_opus} color="#b07aee" />
+              <UsageCard label={t('label7dOpus')} description={t('desc7dOpus')} entry={usage.seven_day_opus} color="#b07aee" periodMs={7 * DAY} paceSettings={settings.pace} />
             )}
             {usage.seven_day_sonnet && (
-              <UsageCard label={t('label7dSonnet')} description={t('desc7dSonnet')} entry={usage.seven_day_sonnet} color="#e07aaa" />
+              <UsageCard label={t('label7dSonnet')} description={t('desc7dSonnet')} entry={usage.seven_day_sonnet} color="#e07aaa" periodMs={7 * DAY} paceSettings={settings.pace} />
             )}
             {usage.extra_usage?.is_enabled && (
               <ExtraUsageCard extra={usage.extra_usage} />

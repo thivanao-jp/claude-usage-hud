@@ -1,6 +1,7 @@
 import { UsageData, Settings, ExtraUsage } from '../types'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
+import { calcPacePct } from '../paceUtil'
 
 interface Props {
   usage: UsageData | null
@@ -15,14 +16,18 @@ interface BarItem {
   key: keyof UsageData
   label: string
   color: string
+  periodMs: number
 }
 
+const HOUR = 60 * 60 * 1000
+const DAY  = 24 * HOUR
+
 const BAR_ITEMS: BarItem[] = [
-  { key: 'five_hour',            label: '5H',   color: '#4a9eff' },
-  { key: 'seven_day',            label: '7D',   color: '#54c98e' },
-  { key: 'seven_day_oauth_apps', label: 'OA',   color: '#e0a12b' },
-  { key: 'seven_day_opus',       label: 'Opus', color: '#b07aee' },
-  { key: 'seven_day_sonnet',     label: 'Snt',  color: '#e07aaa' },
+  { key: 'five_hour',            label: '5H',   color: '#4a9eff', periodMs: 5 * HOUR },
+  { key: 'seven_day',            label: '7D',   color: '#54c98e', periodMs: 7 * DAY },
+  { key: 'seven_day_oauth_apps', label: 'OA',   color: '#e0a12b', periodMs: 7 * DAY },
+  { key: 'seven_day_opus',       label: 'Opus', color: '#b07aee', periodMs: 7 * DAY },
+  { key: 'seven_day_sonnet',     label: 'Snt',  color: '#e07aaa', periodMs: 7 * DAY },
 ]
 
 interface RelTime {
@@ -118,6 +123,7 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
         <div style={{ display: 'flex', gap: 4, WebkitAppRegion: 'no-drag' as any }}>
           <button onClick={onRefresh}        title={t('refresh')}    style={iconBtnStyle(th.iconBtn)}>↻</button>
           <button onClick={onSwitchToDetail} title={t('detailView')} style={iconBtnStyle(th.iconBtn)}>⊞</button>
+          <button onClick={() => window.api.openSettings()} title={t('settings')} style={iconBtnStyle(th.iconBtn)}>⚙</button>
         </div>
       </div>
 
@@ -128,36 +134,55 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
           const pct      = entry ? Math.min(Math.round((entry as any).utilization), 100) : 0
           const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : item.color
           const { date, time, rel } = formatReset((entry as any)?.resets_at ?? null, t('timeNow'))
+          const resetsAt = (entry as any)?.resets_at ?? null
+          const pacePct = resetsAt ? calcPacePct(resetsAt, item.periodMs, settings.pace) : null
 
           return (
-            <div
-              key={item.key}
-              style={{
-                position: 'relative',
-                height: 34,
-                borderRadius: 4,
-                overflow: 'hidden',
-                marginBottom: 4,
-                background: th.bgBar,
-                WebkitAppRegion: 'drag' as any,
-              }}
-            >
-              <div style={{
-                position: 'absolute',
-                inset: 0,
-                width: `${pct}%`,
-                background: barColor,
-                borderRadius: 4,
-                transition: 'width 0.4s ease',
-              }} />
-              <div style={barTextStyle}>
-                <span style={{ width: 30, flexShrink: 0 }}>{item.label}</span>
-                <span style={{ width: 72, flexShrink: 0 }}>{date}</span>
-                <span style={{ width: 44, flexShrink: 0 }}>{time}</span>
-                <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{rel.major}</span>
-                <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{rel.minor}</span>
-                <span style={{ flex: 1, textAlign: 'right' }}>{pct}%</span>
+            <div key={item.key} style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
+              <div
+                style={{
+                  position: 'relative',
+                  height: 34,
+                  borderRadius: 4,
+                  overflow: 'hidden',
+                  background: th.bgBar,
+                }}
+              >
+                <div style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: `${pct}%`,
+                  background: barColor,
+                  borderRadius: 4,
+                  transition: 'width 0.4s ease',
+                }} />
+                <div style={barTextStyle}>
+                  <span style={{ width: 30, flexShrink: 0 }}>{item.label}</span>
+                  <span style={{ width: 72, flexShrink: 0 }}>{date}</span>
+                  <span style={{ width: 44, flexShrink: 0 }}>{time}</span>
+                  <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{rel.major}</span>
+                  <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{rel.minor}</span>
+                  <span style={{ flex: 1, textAlign: 'right' }}>{pct}%</span>
+                </div>
               </div>
+              {pacePct != null && (
+                <div style={{
+                  height: 3,
+                  borderRadius: 1,
+                  background: th.bgBar,
+                  marginTop: 1,
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    width: `${pacePct}%`,
+                    height: '100%',
+                    background: th.textMuted,
+                    borderRadius: 1,
+                    opacity: 0.5,
+                    transition: 'width 0.4s ease',
+                  }} />
+                </div>
+              )}
             </div>
           )
         })}

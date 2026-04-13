@@ -1,6 +1,7 @@
-import { UsageEntry } from '../types'
+import { UsageEntry, Settings } from '../types'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
+import { calcPacePct } from '../paceUtil'
 
 interface Props {
   label: string
@@ -8,6 +9,8 @@ interface Props {
   entry: UsageEntry
   color: string
   highlight?: boolean
+  periodMs: number
+  paceSettings?: Settings['pace']
 }
 
 function formatResetAt(iso: string | null, resettingLabel: string): { abs: string; rel: string } {
@@ -37,11 +40,12 @@ function formatResetAt(iso: string | null, resettingLabel: string): { abs: strin
   return { abs, rel: rel.trim() }
 }
 
-export function UsageCard({ label, description, entry, color, highlight }: Props) {
+export function UsageCard({ label, description, entry, color, highlight, periodMs, paceSettings }: Props) {
   const t = useT()
   const th = useTheme()
   const pct = Math.min(Math.round(entry.utilization), 100)
   const { abs, rel } = formatResetAt(entry.resets_at, t('resetting'))
+  const pacePct = entry.resets_at ? calcPacePct(entry.resets_at, periodMs, paceSettings) : null
 
   const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : color
 
@@ -62,7 +66,6 @@ export function UsageCard({ label, description, entry, color, highlight }: Props
         background: th.bgBar,
         borderRadius: 3,
         height: 5,
-        marginBottom: 6,
         overflow: 'hidden'
       }}>
         <div style={{
@@ -73,6 +76,26 @@ export function UsageCard({ label, description, entry, color, highlight }: Props
           transition: 'width 0.4s ease'
         }} />
       </div>
+      {pacePct != null && (
+        <div style={{
+          height: 3,
+          borderRadius: 1,
+          background: th.bgBar,
+          marginTop: 1,
+          marginBottom: 4,
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            width: `${pacePct}%`,
+            height: '100%',
+            background: th.textMuted,
+            borderRadius: 1,
+            opacity: 0.5,
+            transition: 'width 0.4s ease',
+          }} />
+        </div>
+      )}
+      {pacePct == null && <div style={{ marginBottom: 6 }} />}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
         <span style={{ color: th.textMuted }}>{t('resetLabel')} <span style={{ color: th.textValue }}>{abs}</span></span>

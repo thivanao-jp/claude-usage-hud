@@ -64,6 +64,12 @@ export interface Settings {
     seven_day_sonnet?: number
     extra_usage?: number
   }
+  pace: {
+    workHoursOnly: boolean
+    workDayStart: number
+    workDayEnd: number
+    excludeWeekends: boolean
+  }
 }
 
 export interface HistoryRow {
