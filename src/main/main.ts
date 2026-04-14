@@ -432,10 +432,25 @@ if (!gotTheLock) {
 
     claudeWebFetcher.setLogCallback(log)
 
+    // 起動時にキャッシュ済み orgUuid を復元
+    const initialSettings = loadSettings()
+    if (initialSettings.orgUuid) {
+      claudeWebFetcher.setInitialOrgUuid(initialSettings.orgUuid)
+      log('Restored cached orgUuid:', initialSettings.orgUuid)
+    }
+
     // ログイン状態が変化したら Settings ウィンドウに通知
     claudeWebFetcher.setStatusChangeCallback((status) => {
       log('Login status changed:', status)
       settingsWindow?.webContents.send('login-status-changed', status)
+    })
+
+    // orgUuid が発見・変更されたら設定ファイルに保存
+    claudeWebFetcher.setOrgUuidChangedCallback((uuid) => {
+      log('orgUuid discovered/changed, saving:', uuid)
+      const s = loadSettings()
+      s.orgUuid = uuid
+      saveSettings(s)
     })
 
     createTray()

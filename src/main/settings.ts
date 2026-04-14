@@ -6,6 +6,7 @@ export type ViewMode = 'compact' | 'detail'
 
 export interface Settings {
   token: string
+  orgUuid?: string
   updateIntervalMinutes: number
   viewMode: ViewMode
   language: 'auto' | 'en' | 'ja'

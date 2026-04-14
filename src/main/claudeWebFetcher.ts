@@ -19,10 +19,19 @@ export class ClaudeWebFetcher {
   private loginStatus: LoginStatus = 'unknown'
   private orgUuid: string | null = null
   private statusChangeCallback: ((status: LoginStatus) => void) | null = null
+  private orgUuidChangedCallback: ((uuid: string) => void) | null = null
   private logCallback: ((...args: unknown[]) => void) | null = null
 
   setStatusChangeCallback(cb: (status: LoginStatus) => void): void {
     this.statusChangeCallback = cb
+  }
+
+  setOrgUuidChangedCallback(cb: (uuid: string) => void): void {
+    this.orgUuidChangedCallback = cb
+  }
+
+  setInitialOrgUuid(uuid: string | null): void {
+    this.orgUuid = uuid
   }
 
   setLogCallback(cb: (...args: unknown[]) => void): void {
@@ -159,25 +168,46 @@ export class ClaudeWebFetcher {
 
     let raw: RawResult | null = null
 
+    const cachedUuid = this.orgUuid
+
     try {
       raw = await win.webContents.executeJavaScript(`
         (async () => {
           try {
-            // /api/organizations でorg一覧を取得してUUIDを入手
+            let orgUuid = ${JSON.stringify(cachedUuid)};
+            let account = null;
+
+            // キャッシュ済み orgUuid がある場合は /api/organizations をスキップして直接 usage を取得
+            if (orgUuid) {
+              const usageRes = await fetch('/api/organizations/' + orgUuid + '/usage', { credentials: 'include' });
+              if (usageRes.ok) {
+                const usage = await usageRes.json();
+                return { orgUuid, usage, account: null };
+              }
+              // 401/403/404 なら orgUuid が無効と判断してリセット → /api/organizations から再取得
+              if (usageRes.status === 401 || usageRes.status === 403 || usageRes.status === 404) {
+                orgUuid = null;
+              } else {
+                return { error: 'usage:' + usageRes.status };
+              }
+            }
+
+            // orgUuid 不明 or 無効になった場合は /api/organizations から取得
             const orgsRes = await fetch('/api/organizations', { credentials: 'include' });
             if (!orgsRes.ok) return { error: 'orgs:' + orgsRes.status };
             const orgs = await orgsRes.json();
 
             // レスポンスは配列 or 単一オブジェクト
             const orgList = Array.isArray(orgs) ? orgs : [orgs];
-            const orgUuid = orgList[0]?.uuid ?? null;
+            orgUuid = orgList[0]?.uuid ?? null;
+            account = orgList[0] ?? null;
             if (!orgUuid) return { error: 'no-org' };
 
-            const usageRes = await fetch('/api/organizations/' + orgUuid + '/usage', { credentials: 'include' });
-            if (!usageRes.ok) return { error: 'usage:' + usageRes.status };
-            const usage = await usageRes.json();
+            const usageRes2 = await fetch('/api/organizations/' + orgUuid + '/usage', { credentials: 'include' });
+            if (!usageRes2.ok) return { error: 'usage:' + usageRes2.status };
+            const usage = await usageRes2.json();
 
-            return { orgUuid, usage, account: orgList[0] };
+            return { orgUuid, usage, account };
           } catch (e) {
             return { error: String(e) };
           }
@@ -190,14 +220,22 @@ export class ClaudeWebFetcher {
     if (!raw || 'error' in raw) {
       const errCode = raw && 'error' in raw ? raw.error : 0
       this.log('claudeWebFetcher: API error', errCode)
-      if (errCode === 401 || errCode === 403) {
+      // errCode は 'orgs:403' のような文字列なので数値を抽出して判定
+      const statusNum = typeof errCode === 'number'
+        ? errCode
+        : parseInt(String(errCode).replace(/\D/g, '')) || 0
+      if (statusNum === 401 || statusNum === 403) {
+        this.orgUuid = null  // キャッシュも無効化
         this.setLoginStatus('logged-out')
       }
       return { ...empty, loginStatus: this.loginStatus }
     }
 
     this.setLoginStatus('logged-in')
-    this.orgUuid = raw.orgUuid
+    if (raw.orgUuid !== this.orgUuid) {
+      this.orgUuid = raw.orgUuid
+      this.orgUuidChangedCallback?.(raw.orgUuid)
+    }
 
     const usage = mapUsage(raw.usage)
     const profile = mapProfile(raw.account, raw.orgUuid)
