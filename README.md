@@ -92,6 +92,66 @@ Claude Usage HUD uses a hidden Electron `BrowserWindow` that maintains your clau
 
 ---
 
+## Local API Server (Claude Code Integration)
+
+When running, Claude Usage HUD exposes a minimal HTTP server on **`http://127.0.0.1:49485`** (localhost only). This lets external tools — including Claude Code skills — read live usage data without requiring an OAuth token or browser session.
+
+### Endpoint
+
+```
+GET http://127.0.0.1:49485/usage
+```
+
+**Response** (JSON):
+
+```json
+{
+  "five_hour": {
+    "utilization": 43,
+    "resets_at": "2026-04-17T08:00:00.000Z"
+  },
+  "seven_day": {
+    "utilization": 12,
+    "resets_at": "2026-04-21T00:00:00.000Z"
+  },
+  "extra_usage": null,
+  "last_updated": "2026-04-17T04:51:38.831Z"
+}
+```
+
+| Field | Description |
+|---|---|
+| `five_hour` | 5-hour burst window — `utilization` (%) and `resets_at` (ISO 8601 UTC) |
+| `seven_day` | 7-day rolling window |
+| `extra_usage` | Monthly add-on credits, or `null` if not enabled |
+| `last_updated` | Timestamp of the last successful data fetch |
+
+Returns the last successfully fetched values. Returns `null` for any window that has not been fetched yet.
+
+### Using with Claude Code's `rate-limit-guard` skill
+
+The [`rate-limit-guard`](https://github.com/thivanao-jp/claude-usage-hud) skill for [Claude Code](https://claude.ai/code) uses this endpoint to automatically pause long-running tasks before hitting the 5-hour rate limit, then resume when the window resets.
+
+**Helper script** (`~/.claude/scripts/check_usage.py`):
+
+```python
+import json, urllib.request
+data = json.loads(urllib.request.urlopen('http://127.0.0.1:49485/usage', timeout=5).read())
+five_hour = data.get('five_hour') or {}
+print(f"5H usage: {five_hour.get('utilization', 0):.0f}%  resets at: {five_hour.get('resets_at')}")
+```
+
+**Skill usage** (`~/.claude/skills/rate-limit-guard.md`):
+
+```
+/rate-limit-guard              # check at default 90% threshold
+/rate-limit-guard threshold=80 # custom threshold
+```
+
+When the 5-hour utilization exceeds the threshold, the skill calls `ScheduleWakeup` with a delay calculated from `resets_at`, pausing all work until the window resets. If Claude Usage HUD is not running, the skill logs a warning and continues without guarding.
+
+---
+
 ## API Response Structure
 
 > **Last verified: 2026-04-17**
