@@ -130,18 +130,17 @@ Returns the last successfully fetched values. Returns `null` for any window that
 
 ### Using with Claude Code's `rate-limit-guard` skill
 
-The [`rate-limit-guard`](https://github.com/thivanao-jp/claude-usage-hud) skill for [Claude Code](https://claude.ai/code) uses this endpoint to automatically pause long-running tasks before hitting the 5-hour rate limit, then resume when the window resets.
+The [`examples/claude-code/`](examples/claude-code/) directory contains a ready-to-use [Claude Code](https://claude.ai/code) skill that automatically pauses long-running tasks before hitting the 5-hour rate limit, then resumes when the window resets.
 
-**Helper script** (`~/.claude/scripts/check_usage.py`):
+**Setup** (one-time):
 
-```python
-import json, urllib.request
-data = json.loads(urllib.request.urlopen('http://127.0.0.1:49485/usage', timeout=5).read())
-five_hour = data.get('five_hour') or {}
-print(f"5H usage: {five_hour.get('utilization', 0):.0f}%  resets at: {five_hour.get('resets_at')}")
+```bash
+# Copy the helper script and skill definition into your Claude Code user directory
+cp examples/claude-code/check_usage.py ~/.claude/scripts/check_usage.py
+cp examples/claude-code/rate-limit-guard.md ~/.claude/skills/rate-limit-guard.md
 ```
 
-**Skill usage** (`~/.claude/skills/rate-limit-guard.md`):
+**Skill usage**:
 
 ```
 /rate-limit-guard              # check at default 90% threshold

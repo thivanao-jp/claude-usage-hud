@@ -130,18 +130,17 @@ GET http://127.0.0.1:49485/usage
 
 ### Claude Code の `rate-limit-guard` スキルとの連携
 
-[Claude Code](https://claude.ai/code) 向けの `rate-limit-guard` スキルはこのエンドポイントを使い、5時間レートリミットに到達する前に長時間タスクを自動停止し、ウィンドウリセット後に自動再開します。
+[`examples/claude-code/`](examples/claude-code/) ディレクトリに、すぐ使える [Claude Code](https://claude.ai/code) スキルが含まれています。5時間レートリミットに到達する前に長時間タスクを自動停止し、ウィンドウリセット後に自動再開します。
 
-**ヘルパースクリプト**（`~/.claude/scripts/check_usage.py`）:
+**セットアップ**（初回のみ）:
 
-```python
-import json, urllib.request
-data = json.loads(urllib.request.urlopen('http://127.0.0.1:49485/usage', timeout=5).read())
-five_hour = data.get('five_hour') or {}
-print(f"5H usage: {five_hour.get('utilization', 0):.0f}%  resets at: {five_hour.get('resets_at')}")
+```bash
+# ヘルパースクリプトとスキル定義を Claude Code ユーザーディレクトリにコピー
+cp examples/claude-code/check_usage.py ~/.claude/scripts/check_usage.py
+cp examples/claude-code/rate-limit-guard.md ~/.claude/skills/rate-limit-guard.md
 ```
 
-**スキルの使い方**（`~/.claude/skills/rate-limit-guard.md`）:
+**スキルの使い方**:
 
 ```
 /rate-limit-guard              # デフォルト閾値 90% でチェック
