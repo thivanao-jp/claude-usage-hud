@@ -92,6 +92,94 @@ Claude Usage HUD uses a hidden Electron `BrowserWindow` that maintains your clau
 
 ---
 
+## API Response Structure
+
+> **Last verified: 2026-04-17**
+
+Usage data is fetched from `https://claude.ai/api/organizations/{orgUuid}/usage`.
+
+### Known response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `five_hour` | `UsageEntry \| null` | 5-hour rolling burst window |
+| `seven_day` | `UsageEntry \| null` | 7-day window (claude.ai / Mobile) |
+| `seven_day_oauth_apps` | `UsageEntry \| null` | 7-day window for OAuth apps (Claude Code, Cursor, etc.) |
+| `seven_day_opus` | `UsageEntry \| null` | 7-day Opus-specific limit |
+| `seven_day_sonnet` | `UsageEntry \| null` | 7-day Sonnet-specific limit (Team Premium) |
+| `seven_day_cowork` | `UsageEntry \| null` | 7-day Cowork limit (plan-specific, observed as null) |
+| `seven_day_omelette` | `UsageEntry \| null` | 7-day "Omelette" limit (internal codename, observed with `utilization: 0`) |
+| `iguana_necktie` | unknown | Internal flag, always null — not tracked |
+| `omelette_promotional` | unknown | Internal promotional flag, always null — not tracked |
+| `extra_usage` | `ExtraUsage \| null` | Monthly add-on credits (Pro+ plans) |
+
+`UsageEntry`:
+```json
+{ "utilization": 43, "resets_at": "2026-04-17T03:00:00+00:00" }
+```
+
+`ExtraUsage`:
+```json
+{
+  "is_enabled": true,
+  "monthly_limit": 5000,
+  "used_credits": 123,
+  "utilization": 2.46,
+  "currency": "USD"
+}
+```
+
+> **Note on internal codenames**: Anthropic uses internal codenames for some fields (e.g. `omelette`, `iguana_necktie`). These may be renamed, removed, or replaced without notice. The app handles unknown/missing fields gracefully — they simply appear as null and are hidden from the UI.
+
+### Rate limiting
+
+The official OAuth usage endpoint (`api.anthropic.com/api/oauth/usage`) returns persistent HTTP 429 for most users. This app avoids that by using the claude.ai web session instead.
+
+---
+
+## Adding a New Usage Field
+
+When Anthropic adds a new usage field to the API response (e.g. a new model or plan tier), you can add it in these steps:
+
+### 1. Add the field to `src/renderer/src/fieldDefs.ts` (and `src/main/fieldDefs.ts`)
+
+```typescript
+{
+  key: 'seven_day_newmodel',
+  shortLabel: 'New',
+  labelEn: '7-Day (New Model)',
+  labelJa: '7日間 (新モデル)',
+  descEn: 'New Model weekly limit',
+  descJa: '新モデル週次制限',
+  alertLabelEn: '7-Day New',
+  alertLabelJa: '7日間 新',
+  showLabelEn: '7-Day New Model',
+  showLabelJa: '7日間 新モデル',
+  color: '#aabbcc',
+  periodMs: 7 * DAY,
+},
+```
+
+### 2. Add the field to `UsageData` in `src/main/claudeApi.ts` and `src/renderer/src/types.ts`
+
+```typescript
+seven_day_newmodel: UsageEntry | null
+```
+
+### 3. Add the field to `mapUsage()` in `src/main/claudeWebFetcher.ts`
+
+```typescript
+seven_day_newmodel: entry(src, 'seven_day_newmodel'),
+```
+
+### 4. Add the DB column in `src/main/db.ts`
+
+Add to `CREATE TABLE` and add an `ALTER TABLE` migration block (follow the pattern of `seven_day_sonnet`).
+
+That's it. The UI (compact/detail/settings/alerts/tray) updates automatically via `WEEKLY_FIELD_DEFS` iteration. Fields that return null from the API are automatically hidden from settings toggles and alert thresholds.
+
+---
+
 ## Development
 
 ### Prerequisites

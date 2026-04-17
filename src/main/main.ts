@@ -13,7 +13,8 @@ import { join } from 'path'
 import { appendFileSync, mkdirSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
 import { loadSettings, saveSettings, Settings, ViewMode } from './settings'
-import { UsageData, ProfileData } from './claudeApi'
+import { UsageData, ProfileData, UsageEntry } from './claudeApi'
+import { WEEKLY_FIELD_DEFS } from './fieldDefs'
 import { saveUsageHistory, getUsageHistory } from './db'
 import { getTokenFromCredentials } from './credentials'
 import { ClaudeWebFetcher } from './claudeWebFetcher'
@@ -74,12 +75,10 @@ const COMPACT_BTN_H = 28   // ボタン行の高さ
 const COMPACT_PAD = 8      // 上下パディング合計
 
 function getCompactHeight(settings: Settings): number {
+  const showFields = settings.tray.showFields ?? {}
   const count = [
     settings.tray.show5h,
-    settings.tray.show7d,
-    settings.tray.showOauth,
-    settings.tray.showOpus,
-    settings.tray.showSonnet,
+    ...WEEKLY_FIELD_DEFS.map(f => showFields[f.key] ?? false),
     settings.tray.showExtra,
   ].filter(Boolean).length || 1
   return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD
@@ -230,6 +229,9 @@ function createTray(): void {
 function updateTray(usage: UsageData, settings: Settings, isStale: boolean): void {
   if (!tray) return
 
+  const showFields = settings.tray.showFields ?? {}
+  const usageRecord = usage as unknown as Record<string, UsageEntry | null>
+
   // Windows: バーチャートアイコンを動的生成
   // macOS:  setTitle() でメニューバーにテキスト表示（setImage は機能しない）
   if (process.platform === 'win32') {
@@ -239,14 +241,11 @@ function updateTray(usage: UsageData, settings: Settings, isStale: boolean): voi
     const parts: string[] = []
     if (settings.tray.show5h && usage.five_hour)
       parts.push(`5h: ${Math.round(usage.five_hour.utilization)}%`)
-    if (settings.tray.show7d && usage.seven_day)
-      parts.push(`7d: ${Math.round(usage.seven_day.utilization)}%`)
-    if (settings.tray.showOauth && usage.seven_day_oauth_apps)
-      parts.push(`OAuth: ${Math.round(usage.seven_day_oauth_apps.utilization)}%`)
-    if (settings.tray.showOpus && usage.seven_day_opus)
-      parts.push(`Opus: ${Math.round(usage.seven_day_opus.utilization)}%`)
-    if (settings.tray.showSonnet && usage.seven_day_sonnet)
-      parts.push(`Sonnet: ${Math.round(usage.seven_day_sonnet.utilization)}%`)
+    for (const field of WEEKLY_FIELD_DEFS) {
+      const entry = usageRecord[field.key]
+      if (showFields[field.key] && entry)
+        parts.push(`${field.shortLabel}: ${Math.round(entry.utilization)}%`)
+    }
     const tip = parts.length > 0
       ? `Claude Usage HUD${isStale ? ' ⚠' : ''}\n${parts.join('\n')}`
       : 'Claude Usage HUD'
@@ -256,14 +255,11 @@ function updateTray(usage: UsageData, settings: Settings, isStale: boolean): voi
     const parts: string[] = []
     if (settings.tray.show5h && usage.five_hour)
       parts.push(`5h:${Math.round(usage.five_hour.utilization)}%`)
-    if (settings.tray.show7d && usage.seven_day)
-      parts.push(`7d:${Math.round(usage.seven_day.utilization)}%`)
-    if (settings.tray.showOauth && usage.seven_day_oauth_apps)
-      parts.push(`oa:${Math.round(usage.seven_day_oauth_apps.utilization)}%`)
-    if (settings.tray.showOpus && usage.seven_day_opus)
-      parts.push(`op:${Math.round(usage.seven_day_opus.utilization)}%`)
-    if (settings.tray.showSonnet && usage.seven_day_sonnet)
-      parts.push(`snt:${Math.round(usage.seven_day_sonnet.utilization)}%`)
+    for (const field of WEEKLY_FIELD_DEFS) {
+      const entry = usageRecord[field.key]
+      if (showFields[field.key] && entry)
+        parts.push(`${field.shortLabel.toLowerCase()}:${Math.round(entry.utilization)}%`)
+    }
     tray.setTitle(parts.length > 0 ? parts.join(' ') + (isStale ? '~' : '') : '--')
   }
 }
@@ -357,25 +353,32 @@ function scheduleUpdates(): void {
 // ---- Alerts ----
 
 function checkAlerts(usage: UsageData, settings: Settings): void {
-  const checks: Array<[keyof typeof settings.alerts, string]> = [
-    ['five_hour',            '5-hour'],
-    ['seven_day',            '7-day'],
-    ['seven_day_oauth_apps', '7-day OAuth Apps'],
-    ['seven_day_opus',       '7-day Opus'],
-    ['seven_day_sonnet',     '7-day Sonnet'],
-  ]
-  for (const [key, label] of checks) {
-    const entry = usage[key as keyof UsageData]
-    const threshold = settings.alerts?.[key]
-    if (entry && threshold && (entry as { utilization: number }).utilization >= threshold) {
+  const usageRecord = usage as unknown as Record<string, UsageEntry | null>
+
+  // 5-hour
+  const fiveHourThreshold = settings.alerts?.['five_hour']
+  if (fiveHourThreshold && usage.five_hour && usage.five_hour.utilization >= fiveHourThreshold) {
+    new Notification({
+      title: 'Claude Usage HUD',
+      body: `5-hour usage is at ${Math.round(usage.five_hour.utilization)}% (threshold: ${fiveHourThreshold}%)`
+    }).show()
+  }
+
+  // Weekly fields (dynamic)
+  for (const field of WEEKLY_FIELD_DEFS) {
+    const entry = usageRecord[field.key]
+    const threshold = settings.alerts?.[field.key]
+    if (entry && threshold && entry.utilization >= threshold) {
       new Notification({
         title: 'Claude Usage HUD',
-        body: `${label} usage is at ${Math.round((entry as { utilization: number }).utilization)}% (threshold: ${threshold}%)`
+        body: `${field.labelEn} usage is at ${Math.round(entry.utilization)}% (threshold: ${threshold}%)`
       }).show()
     }
   }
-  const extraThreshold = settings.alerts?.extra_usage
-  if (extraThreshold && usage.extra_usage?.is_enabled && usage.extra_usage.utilization >= extraThreshold) {
+
+  // Extra usage
+  const extraThreshold = settings.alerts?.['extra_usage']
+  if (extraThreshold && usage.extra_usage?.is_enabled && usage.extra_usage.utilization != null && usage.extra_usage.utilization >= extraThreshold) {
     new Notification({
       title: 'Claude Usage HUD',
       body: `Extra usage is at ${Math.round(usage.extra_usage.utilization)}% (threshold: ${extraThreshold}%)`

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Settings } from '../types'
+import { Settings, UsageData } from '../types'
 import { useT } from '../LangContext'
+import { useLang } from '../LangContext'
 import { useTheme } from '../ThemeContext'
+import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
 
 const defaultSettings: Settings = {
   token: '',
@@ -9,7 +11,18 @@ const defaultSettings: Settings = {
   viewMode: 'compact',
   language: 'auto',
   theme: 'auto',
-  tray: { show5h: true, show7d: true, showOauth: false, showOpus: false, showSonnet: false, showExtra: false },
+  tray: {
+    show5h: true,
+    showExtra: false,
+    showFields: {
+      seven_day: true,
+      seven_day_oauth_apps: false,
+      seven_day_opus: false,
+      seven_day_sonnet: false,
+      seven_day_cowork: false,
+      seven_day_omelette: false,
+    },
+  },
   window: { opacity: 90, alwaysOnTop: true },
   alerts: {},
   pace: { workHoursOnly: false, workDayStart: 5, workDayEnd: 22, excludeWeekends: true },
@@ -21,14 +34,17 @@ interface Props {
 
 export function SettingsView({ onSettingsChange }: Props) {
   const t = useT()
+  const lang = useLang()
   const th = useTheme()
   const [s, setS] = useState<Settings>(defaultSettings)
   const [saved, setSaved] = useState(false)
   const [loginStatus, setLoginStatus] = useState<'logged-in' | 'logged-out' | 'unknown'>('unknown')
+  const [currentUsage, setCurrentUsage] = useState<UsageData | null>(null)
 
   useEffect(() => {
     window.api.getSettings().then(setS)
     window.api.getLoginStatus().then(setLoginStatus)
+    window.api.getUsage().then(r => setCurrentUsage(r.usage))
     const off = window.api.onLoginStatusChanged(status => setLoginStatus(status))
     return off
   }, [])
@@ -130,12 +146,35 @@ export function SettingsView({ onSettingsChange }: Props) {
       <Section title={t('sectionTray')} th={th}>
         <Label th={th}>{t('showInTray')}</Label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <CheckRow label={t('show5h')}    checked={s.tray.show5h}    onChange={v => upd(p => ({ ...p, tray: { ...p.tray, show5h: v } }))}    th={th} />
-          <CheckRow label={t('show7d')}    checked={s.tray.show7d}    onChange={v => upd(p => ({ ...p, tray: { ...p.tray, show7d: v } }))}    th={th} />
-          <CheckRow label={t('showOauth')} checked={s.tray.showOauth} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showOauth: v } }))} th={th} />
-          <CheckRow label={t('showOpus')}   checked={s.tray.showOpus}         onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showOpus: v } }))}   th={th} />
-          <CheckRow label={t('showSonnet')} checked={s.tray.showSonnet ?? false} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showSonnet: v } }))} th={th} />
-          <CheckRow label={t('showExtra')}  checked={s.tray.showExtra ?? false}  onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showExtra: v } }))}  th={th} />
+          <CheckRow label={t('show5h')} checked={s.tray.show5h} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, show5h: v } }))} th={th} />
+          {WEEKLY_FIELD_DEFS.map(field => {
+            const usageRecord = currentUsage as (Record<string, unknown> | null)
+            const isAvailable = usageRecord?.[field.key] != null
+            const label = lang === 'ja' ? field.showLabelJa : field.showLabelEn
+            const checked = (s.tray.showFields ?? {})[field.key] ?? false
+            if (!isAvailable && currentUsage != null) {
+              // データあり but このフィールドが null = このプランでは利用不可
+              return (
+                <label key={field.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: th.textFaint, opacity: 0.5 }}>
+                  <input type="checkbox" checked={false} disabled />
+                  {label} <span style={{ fontSize: 11, marginLeft: 4 }}>({t('fieldUnavailable')})</span>
+                </label>
+              )
+            }
+            return (
+              <CheckRow
+                key={field.key}
+                label={label}
+                checked={checked}
+                onChange={v => upd(p => ({
+                  ...p,
+                  tray: { ...p.tray, showFields: { ...(p.tray.showFields ?? {}), [field.key]: v } }
+                }))}
+                th={th}
+              />
+            )
+          })}
+          <CheckRow label={t('showExtra')} checked={s.tray.showExtra ?? false} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showExtra: v } }))} th={th} />
         </div>
       </Section>
 
@@ -179,42 +218,30 @@ export function SettingsView({ onSettingsChange }: Props) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <AlertThreshold
             label={`${t('alertLabel5h')} ${t('alertsPct')}`}
-            value={s.alerts.five_hour}
+            value={s.alerts['five_hour']}
             onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, five_hour: v } }))}
             inputStyle={inputStyle}
             th={th}
           />
-          <AlertThreshold
-            label={`${t('alertLabel7d')} ${t('alertsPct')}`}
-            value={s.alerts.seven_day}
-            onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, seven_day: v } }))}
-            inputStyle={inputStyle}
-            th={th}
-          />
-          <AlertThreshold
-            label={`${t('alertLabel7dOauth')} ${t('alertsPct')}`}
-            value={s.alerts.seven_day_oauth_apps}
-            onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, seven_day_oauth_apps: v } }))}
-            inputStyle={inputStyle}
-            th={th}
-          />
-          <AlertThreshold
-            label={`${t('alertLabel7dOpus')} ${t('alertsPct')}`}
-            value={s.alerts.seven_day_opus}
-            onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, seven_day_opus: v } }))}
-            inputStyle={inputStyle}
-            th={th}
-          />
-          <AlertThreshold
-            label={`${t('alertLabel7dSonnet')} ${t('alertsPct')}`}
-            value={s.alerts.seven_day_sonnet}
-            onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, seven_day_sonnet: v } }))}
-            inputStyle={inputStyle}
-            th={th}
-          />
+          {WEEKLY_FIELD_DEFS.map(field => {
+            const usageRecord = currentUsage as (Record<string, unknown> | null)
+            const isAvailable = currentUsage == null || usageRecord?.[field.key] != null
+            if (!isAvailable) return null
+            const alertLabel = lang === 'ja' ? field.alertLabelJa : field.alertLabelEn
+            return (
+              <AlertThreshold
+                key={field.key}
+                label={`${alertLabel} ${t('alertsPct')}`}
+                value={s.alerts[field.key] as number | undefined}
+                onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, [field.key]: v } }))}
+                inputStyle={inputStyle}
+                th={th}
+              />
+            )
+          })}
           <AlertThreshold
             label={`${t('alertLabelExtra')} ${t('alertsPct')}`}
-            value={s.alerts.extra_usage}
+            value={s.alerts['extra_usage']}
             onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, extra_usage: v } }))}
             inputStyle={inputStyle}
             th={th}

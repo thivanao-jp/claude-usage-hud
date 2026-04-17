@@ -1,7 +1,8 @@
-import { UsageData, Settings, ExtraUsage } from '../types'
+import { UsageData, Settings, ExtraUsage, UsageEntry } from '../types'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { calcPacePct } from '../paceUtil'
+import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
 
 interface Props {
   usage: UsageData | null
@@ -13,7 +14,7 @@ interface Props {
 }
 
 interface BarItem {
-  key: keyof UsageData
+  key: string
   label: string
   color: string
   periodMs: number
@@ -22,13 +23,7 @@ interface BarItem {
 const HOUR = 60 * 60 * 1000
 const DAY  = 24 * HOUR
 
-const BAR_ITEMS: BarItem[] = [
-  { key: 'five_hour',            label: '5H',   color: '#4a9eff', periodMs: 5 * HOUR },
-  { key: 'seven_day',            label: '7D',   color: '#54c98e', periodMs: 7 * DAY },
-  { key: 'seven_day_oauth_apps', label: 'OA',   color: '#e0a12b', periodMs: 7 * DAY },
-  { key: 'seven_day_opus',       label: 'Opus', color: '#b07aee', periodMs: 7 * DAY },
-  { key: 'seven_day_sonnet',     label: 'Snt',  color: '#e07aaa', periodMs: 7 * DAY },
-]
+const FIVE_HOUR_BAR: BarItem = { key: 'five_hour', label: '5H', color: '#4a9eff', periodMs: 5 * HOUR }
 
 interface RelTime {
   major: string
@@ -69,16 +64,26 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
   const t = useT()
   const th = useTheme()
 
-  const visibleBars = BAR_ITEMS.filter(item => {
-    if (item.key === 'five_hour')            return settings.tray.show5h
-    if (item.key === 'seven_day')            return settings.tray.show7d
-    if (item.key === 'seven_day_oauth_apps') return settings.tray.showOauth
-    if (item.key === 'seven_day_opus')       return settings.tray.showOpus
-    if (item.key === 'seven_day_sonnet')     return settings.tray.showSonnet ?? false
-    return false
-  })
+  const usageRecord = usage as (Record<string, UsageEntry | null> | null)
+  const showFields = settings.tray.showFields ?? {}
+
+  const weeklyBarItems: BarItem[] = WEEKLY_FIELD_DEFS.map(f => ({
+    key: f.key,
+    label: f.shortLabel,
+    color: f.color,
+    periodMs: f.periodMs,
+  }))
+
+  const visibleBars: BarItem[] = []
+  if (settings.tray.show5h) visibleBars.push(FIVE_HOUR_BAR)
+  for (const item of weeklyBarItems) {
+    // フィールドが設定で有効かつ API レスポンスに存在する場合のみ表示
+    if ((showFields[item.key] ?? false) && usageRecord?.[item.key] != null) {
+      visibleBars.push(item)
+    }
+  }
   const showExtraBar = settings.tray.showExtra
-  const bars = visibleBars.length > 0 || showExtraBar ? visibleBars : BAR_ITEMS
+  const bars = visibleBars.length > 0 || showExtraBar ? visibleBars : [FIVE_HOUR_BAR]
 
   const barTextStyle: React.CSSProperties = {
     position: 'absolute',
@@ -130,11 +135,11 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
       {/* Bars */}
       <div style={{ padding: '0 4px 4px' }}>
         {bars.map(item => {
-          const entry = usage?.[item.key]
-          const pct      = entry ? Math.min(Math.round((entry as any).utilization), 100) : 0
+          const entry = usageRecord?.[item.key] ?? null
+          const pct      = entry ? Math.min(Math.round(entry.utilization), 100) : 0
           const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : item.color
-          const { date, time, rel } = formatReset((entry as any)?.resets_at ?? null, t('timeNow'))
-          const resetsAt = (entry as any)?.resets_at ?? null
+          const { date, time, rel } = formatReset(entry?.resets_at ?? null, t('timeNow'))
+          const resetsAt = entry?.resets_at ?? null
           const pacePct = resetsAt ? calcPacePct(resetsAt, item.periodMs, settings.pace) : null
 
           return (

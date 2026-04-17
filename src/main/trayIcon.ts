@@ -5,8 +5,9 @@
 
 import { deflateSync } from 'zlib'
 import { nativeImage, NativeImage } from 'electron'
-import { UsageData } from './claudeApi'
+import { UsageData, UsageEntry } from './claudeApi'
 import { Settings } from './settings'
+import { WEEKLY_FIELD_DEFS } from './fieldDefs'
 
 // ---- Minimal PNG encoder ----
 
@@ -62,12 +63,10 @@ function barColor(pct: number, base: RGB): RGB {
   return base
 }
 
-const BASE: Record<string, RGB> = {
-  five_hour:            [74,  158, 255],  // blue
-  seven_day:            [84,  201, 142],  // green
-  seven_day_oauth_apps: [224, 161,  43],  // orange
-  seven_day_opus:       [176, 122, 238],  // purple
-  seven_day_sonnet:     [224, 122, 170],  // pink
+function hexToRgb(hex: string): RGB {
+  const m = hex.replace('#', '').match(/.{2}/g)
+  if (!m || m.length < 3) return [128, 128, 128]
+  return [parseInt(m[0]!, 16), parseInt(m[1]!, 16), parseInt(m[2]!, 16)] as RGB
 }
 
 /**
@@ -81,17 +80,21 @@ export function createBarIcon(
 ): NativeImage {
   type Bar = { pct: number; color: RGB }
   const bars: Bar[] = []
+  const usageRecord = usage as unknown as Record<string, UsageEntry | null>
+  const showFields = settings.tray.showFields ?? {}
 
-  function add(key: keyof typeof BASE, pct: number | null | undefined): void {
+  function addRgb(pct: number | null | undefined, base: RGB): void {
     if (pct == null) return
-    bars.push({ pct: Math.min(Math.round(pct), 100), color: barColor(pct, BASE[key]!) })
+    bars.push({ pct: Math.min(Math.round(pct), 100), color: barColor(pct, base) })
   }
 
-  if (settings.tray.show5h)     add('five_hour',            usage.five_hour?.utilization)
-  if (settings.tray.show7d)     add('seven_day',            usage.seven_day?.utilization)
-  if (settings.tray.showOauth)  add('seven_day_oauth_apps', usage.seven_day_oauth_apps?.utilization)
-  if (settings.tray.showOpus)   add('seven_day_opus',       usage.seven_day_opus?.utilization)
-  if (settings.tray.showSonnet) add('seven_day_sonnet',     usage.seven_day_sonnet?.utilization)
+  if (settings.tray.show5h) addRgb(usage.five_hour?.utilization, [74, 158, 255])
+  for (const field of WEEKLY_FIELD_DEFS) {
+    if (showFields[field.key]) {
+      const entry = usageRecord[field.key]
+      addRgb(entry?.utilization, hexToRgb(field.color))
+    }
+  }
 
   if (bars.length === 0) return nativeImage.createEmpty()
 

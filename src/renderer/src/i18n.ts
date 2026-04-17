@@ -102,6 +102,7 @@ const en = {
   themeAuto:           'Auto (System)',
   themeDark:           'Dark',
   themeLight:          'Light',
+  fieldUnavailable:    'Not available on your plan',
 } as const
 
 const ja = {
@@ -196,6 +197,7 @@ const ja = {
   themeAuto:           '自動 (システム設定)',
   themeDark:           'ダーク',
   themeLight:          'ライト',
+  fieldUnavailable:    'このプランでは利用不可',
 } satisfies typeof en
 
 const dict: Record<Lang, typeof en> = { en, ja }

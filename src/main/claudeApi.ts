@@ -10,7 +10,8 @@ export interface ExtraUsage {
   is_enabled: boolean
   monthly_limit: number
   used_credits: number
-  utilization: number
+  utilization: number | null
+  currency?: string
 }
 
 export interface UsageData {
@@ -19,6 +20,8 @@ export interface UsageData {
   seven_day_oauth_apps: UsageEntry | null
   seven_day_opus: UsageEntry | null
   seven_day_sonnet: UsageEntry | null
+  seven_day_cowork: UsageEntry | null
+  seven_day_omelette: UsageEntry | null
   extra_usage: ExtraUsage | null
 }
 

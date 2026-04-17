@@ -13,11 +13,13 @@ export interface Settings {
   theme: 'auto' | 'dark' | 'light'
   tray: {
     show5h: boolean
-    show7d: boolean
-    showOauth: boolean
-    showOpus: boolean
-    showSonnet: boolean
     showExtra: boolean
+    showFields: Record<string, boolean>  // key = WeeklyFieldDef.key
+    // deprecated (migration用、削除しない)
+    show7d?: boolean
+    showOauth?: boolean
+    showOpus?: boolean
+    showSonnet?: boolean
   }
   window: {
     opacity: number        // 10〜100
@@ -27,12 +29,8 @@ export interface Settings {
     detailX?: number
     detailY?: number
   }
-  alerts: {
+  alerts: Record<string, number | undefined> & {
     five_hour?: number
-    seven_day?: number
-    seven_day_oauth_apps?: number
-    seven_day_opus?: number
-    seven_day_sonnet?: number
     extra_usage?: number
   }
   pace: {
@@ -51,11 +49,15 @@ const defaultSettings: Settings = {
   theme: 'auto',
   tray: {
     show5h: true,
-    show7d: true,
-    showOauth: false,
-    showOpus: false,
-    showSonnet: false,
     showExtra: false,
+    showFields: {
+      seven_day: true,
+      seven_day_oauth_apps: false,
+      seven_day_opus: false,
+      seven_day_sonnet: false,
+      seven_day_cowork: false,
+      seven_day_omelette: false,
+    },
   },
   window: {
     opacity: 90,
@@ -81,7 +83,7 @@ export function loadSettings(): Settings {
   if (!existsSync(p)) return { ...defaultSettings }
   try {
     const saved = JSON.parse(readFileSync(p, 'utf-8'))
-    return {
+    const merged: Settings = {
       ...defaultSettings,
       ...saved,
       tray:   { ...defaultSettings.tray,   ...(saved.tray   ?? {}) },
@@ -89,6 +91,19 @@ export function loadSettings(): Settings {
       alerts: { ...defaultSettings.alerts, ...(saved.alerts ?? {}) },
       pace:   { ...defaultSettings.pace,   ...(saved.pace   ?? {}) },
     }
+    // 旧フォーマットからの移行
+    if (!saved.tray?.showFields) {
+      const t = saved.tray ?? {}
+      merged.tray.showFields = {
+        seven_day: t.show7d ?? true,
+        seven_day_oauth_apps: t.showOauth ?? false,
+        seven_day_opus: t.showOpus ?? false,
+        seven_day_sonnet: t.showSonnet ?? false,
+        seven_day_cowork: false,
+        seven_day_omelette: false,
+      }
+    }
+    return merged
   } catch {
     return { ...defaultSettings }
   }

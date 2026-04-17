@@ -310,7 +310,8 @@ function mapUsage(raw: unknown): UsageData | null {
         is_enabled: Boolean(e['is_enabled']),
         monthly_limit: monthlyLimit,
         used_credits: Number(e['used_credits'] ?? 0),
-        utilization: Number(e['utilization'] ?? 0),
+        utilization: e['utilization'] != null ? Number(e['utilization']) : null,
+        currency: e['currency'] != null ? String(e['currency']) : undefined,
       }
     }
   }
@@ -320,7 +321,9 @@ function mapUsage(raw: unknown): UsageData | null {
     seven_day: entry(src, 'seven_day'),
     seven_day_oauth_apps: entry(src, 'seven_day_oauth_apps'),
     seven_day_opus: entry(src, 'seven_day_opus'),
-    seven_day_sonnet: entry(r, 'seven_day_sonnet'),
+    seven_day_sonnet: entry(src, 'seven_day_sonnet'),
+    seven_day_cowork: entry(src, 'seven_day_cowork'),
+    seven_day_omelette: entry(src, 'seven_day_omelette'),
     extra_usage,
   }
 
