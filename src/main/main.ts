@@ -11,6 +11,7 @@ import {
 } from 'electron'
 import { join } from 'path'
 import { appendFileSync, mkdirSync } from 'fs'
+import { createServer as createHttpServer, IncomingMessage, ServerResponse } from 'http'
 import { is } from '@electron-toolkit/utils'
 import { loadSettings, saveSettings, Settings, ViewMode } from './settings'
 import { UsageData, ProfileData, UsageEntry } from './claudeApi'
@@ -418,6 +419,42 @@ ipcMain.handle('get-login-status', () => claudeWebFetcher.getLoginStatus())
 
 // ---- App Lifecycle ----
 
+// ---- Local API Server (localhost only, for Claude Code skill integration) ----
+
+const LOCAL_API_PORT = 49485
+
+function startLocalApiServer(): void {
+  const server = createHttpServer((req: IncomingMessage, res: ServerResponse) => {
+    if (req.method !== 'GET' || req.url !== '/usage') {
+      res.writeHead(404)
+      res.end('Not Found')
+      return
+    }
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    })
+    res.end(JSON.stringify({
+      five_hour: lastUsage?.five_hour ?? null,
+      seven_day: lastUsage?.seven_day ?? null,
+      extra_usage: lastUsage?.extra_usage ?? null,
+      last_updated: lastSuccessAt?.toISOString() ?? null,
+    }))
+  })
+
+  server.listen(LOCAL_API_PORT, '127.0.0.1', () => {
+    log(`Local API server listening on http://127.0.0.1:${LOCAL_API_PORT}/usage`)
+  })
+
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      log(`Local API port ${LOCAL_API_PORT} already in use, skipping`)
+    } else {
+      log('Local API server error:', err)
+    }
+  })
+}
+
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
@@ -458,6 +495,7 @@ if (!gotTheLock) {
 
     createTray()
     scheduleUpdates()
+    startLocalApiServer()
   })
 
   app.on('before-quit', () => {
