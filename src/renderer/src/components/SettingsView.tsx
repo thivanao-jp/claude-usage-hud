@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Settings, UsageData } from '../types'
+import { Settings, UsageData, UpdateStatus } from '../types'
 import { useT } from '../LangContext'
 import { useLang } from '../LangContext'
 import { useTheme } from '../ThemeContext'
@@ -43,13 +43,17 @@ export function SettingsView({ onSettingsChange }: Props) {
   const [saved, setSaved] = useState(false)
   const [loginStatus, setLoginStatus] = useState<'logged-in' | 'logged-out' | 'unknown'>('unknown')
   const [currentUsage, setCurrentUsage] = useState<UsageData | null>(null)
+  const [appVersion, setAppVersion] = useState('')
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
 
   useEffect(() => {
     window.api.getSettings().then(setS)
     window.api.getLoginStatus().then(setLoginStatus)
     window.api.getUsage().then(r => setCurrentUsage(r.usage))
-    const off = window.api.onLoginStatusChanged(status => setLoginStatus(status))
-    return off
+    window.api.getAppVersion().then(setAppVersion)
+    const offLogin = window.api.onLoginStatusChanged(status => setLoginStatus(status))
+    const offUpdate = window.api.onUpdateStatus(status => setUpdateStatus(status as UpdateStatus))
+    return () => { offLogin(); offUpdate() }
   }, [])
 
   async function handleSave() {
@@ -309,6 +313,44 @@ export function SettingsView({ onSettingsChange }: Props) {
           </div>
         )}
         <div style={{ fontSize: 11, color: th.textFaint2, marginTop: 6 }}>{t('paceHint')}</div>
+      </Section>
+
+      {/* Updates */}
+      <Section title={t('sectionUpdates')} th={th}>
+        <div style={{ fontSize: 12, color: th.textLabel, marginBottom: 8 }}>{t('currentVersion', appVersion)}</div>
+        <CheckRow
+          label={t('autoUpdateLabel')}
+          checked={s.autoUpdate ?? true}
+          onChange={v => upd(p => ({ ...p, autoUpdate: v }))}
+          th={th}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+          <button
+            onClick={() => { setUpdateStatus({ state: 'checking' }); window.api.checkForUpdates() }}
+            disabled={updateStatus.state === 'checking' || updateStatus.state === 'downloading'}
+            style={{ ...secondaryBtn, opacity: (updateStatus.state === 'checking' || updateStatus.state === 'downloading') ? 0.5 : 1 }}
+          >
+            {updateStatus.state === 'checking' ? t('updateChecking') : t('checkNow')}
+          </button>
+          {updateStatus.state === 'downloaded' && (
+            <button onClick={() => window.api.installUpdate()} style={{ ...secondaryBtn, color: '#4caf50', borderColor: '#4caf50' }}>
+              {t('restartToUpdate')}
+            </button>
+          )}
+        </div>
+        {updateStatus.state !== 'idle' && updateStatus.state !== 'checking' && (
+          <div style={{ fontSize: 12, marginTop: 8, color:
+            updateStatus.state === 'downloaded' ? '#4caf50'
+            : updateStatus.state === 'error' ? '#f44336'
+            : th.textSub
+          }}>
+            {updateStatus.state === 'available' && t('updateAvailable', updateStatus.version ?? '')}
+            {updateStatus.state === 'downloading' && t('updateDownloading', String(updateStatus.percent ?? 0))}
+            {updateStatus.state === 'downloaded' && t('updateDownloaded', updateStatus.version ?? '')}
+            {updateStatus.state === 'not-available' && t('updateNotAvailable')}
+            {updateStatus.state === 'error' && `${t('updateError')}: ${updateStatus.message ?? ''}`}
+          </div>
+        )}
       </Section>
 
       {/* Save */}

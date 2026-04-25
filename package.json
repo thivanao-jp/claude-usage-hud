@@ -15,7 +15,8 @@
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@electron-toolkit/utils": "^4.0.0",
     "better-sqlite3": "^12.8.0",
-    "electron-store": "^8.2.0"
+    "electron-store": "^8.2.0",
+    "electron-updater": "^6.8.3"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",
@@ -36,6 +37,11 @@
   "build": {
     "appId": "jp.thivanao.claude-usage-hud",
     "productName": "Claude Usage HUD",
+    "publish": {
+      "provider": "github",
+      "owner": "thivanao-jp",
+      "repo": "claude-usage-hud"
+    },
     "files": [
       "out/**/*"
     ],

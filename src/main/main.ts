@@ -13,6 +13,7 @@ import { join } from 'path'
 import { appendFileSync, mkdirSync } from 'fs'
 import { createServer as createHttpServer, IncomingMessage, ServerResponse } from 'http'
 import { is } from '@electron-toolkit/utils'
+import { autoUpdater } from 'electron-updater'
 import { loadSettings, saveSettings, Settings, ViewMode } from './settings'
 import { UsageData, ProfileData, UsageEntry } from './claudeApi'
 import { WEEKLY_FIELD_DEFS } from './fieldDefs'
@@ -37,6 +38,8 @@ let tray: Tray | null = null
 let hudWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
 let updateTimer: ReturnType<typeof setInterval> | null = null
+let updateCheckTimer: ReturnType<typeof setInterval> | null = null
+let updateDownloaded = false
 
 const claudeWebFetcher = new ClaudeWebFetcher()
 
@@ -204,6 +207,28 @@ function switchViewMode(mode: ViewMode): void {
 
 // ---- Tray ----
 
+function buildContextMenu(): Menu {
+  const items: Electron.MenuItemConstructorOptions[] = [
+    { label: 'Show / Hide', click: () => toggleHudWindow() },
+    { label: 'Compact', click: () => switchViewMode('compact') },
+    { label: 'Detail', click: () => switchViewMode('detail') },
+    { label: 'Settings', click: () => openSettingsWindow() },
+    { type: 'separator' },
+    { label: 'Refresh Now', click: () => doUpdate() },
+    { label: 'Check for Updates', click: () => { autoUpdater.checkForUpdates().catch(e => log('manual update check error:', e)) } },
+  ]
+
+  if (updateDownloaded) {
+    items.push({ type: 'separator' })
+    items.push({ label: '✦ Restart to Update', click: () => autoUpdater.quitAndInstall() })
+  }
+
+  items.push({ type: 'separator' })
+  items.push({ label: 'Quit', click: () => app.quit() })
+
+  return Menu.buildFromTemplate(items)
+}
+
 function createTray(): void {
   const iconPath = is.dev
     ? join(__dirname, '../../resources/tray-icon.png')
@@ -212,19 +237,8 @@ function createTray(): void {
   tray = new Tray(icon)
   tray.setToolTip('Claude Usage HUD')
 
-  const contextMenu = Menu.buildFromTemplate([
-    { label: 'Show / Hide', click: () => toggleHudWindow() },
-    { label: 'Compact', click: () => switchViewMode('compact') },
-    { label: 'Detail', click: () => switchViewMode('detail') },
-    { label: 'Settings', click: () => openSettingsWindow() },
-    { type: 'separator' },
-    { label: 'Refresh Now', click: () => doUpdate() },
-    { type: 'separator' },
-    { label: 'Quit', click: () => app.quit() }
-  ])
-
   tray.on('click', () => toggleHudWindow())
-  tray.on('right-click', () => tray!.popUpContextMenu(contextMenu))
+  tray.on('right-click', () => tray!.popUpContextMenu(buildContextMenu()))
 }
 
 function updateTray(usage: UsageData, settings: Settings, isStale: boolean): void {
@@ -417,8 +431,86 @@ ipcMain.handle('open-external', (_e, url: string) => shell.openExternal(url))
 ipcMain.handle('show-login-window', () => claudeWebFetcher.showLoginWindow())
 ipcMain.handle('hide-login-window', () => claudeWebFetcher.hideLoginWindow())
 ipcMain.handle('get-login-status', () => claudeWebFetcher.getLoginStatus())
+ipcMain.handle('get-app-version', () => app.getVersion())
+ipcMain.handle('check-for-updates', () => autoUpdater.checkForUpdates().catch(e => log('update check error:', e)))
+ipcMain.handle('install-update', () => autoUpdater.quitAndInstall())
 
 // ---- App Lifecycle ----
+
+// ---- Auto Updater ----
+
+function broadcastToWindows(channel: string, ...args: unknown[]): void {
+  for (const win of [hudWindow, settingsWindow]) {
+    if (win && !win.isDestroyed()) win.webContents.send(channel, ...args)
+  }
+}
+
+function setupAutoUpdater(): void {
+  if (is.dev) {
+    log('autoUpdater: skipped in dev mode')
+    return
+  }
+
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+
+  autoUpdater.on('checking-for-update', () => {
+    log('autoUpdater: checking for update')
+    broadcastToWindows('update-status', { state: 'checking' })
+  })
+
+  autoUpdater.on('update-available', (info) => {
+    log('autoUpdater: update available', info.version)
+    broadcastToWindows('update-status', { state: 'available', version: info.version })
+    new Notification({
+      title: 'Claude Usage HUD',
+      body: `v${info.version} が利用可能です。バックグラウンドでダウンロードしています...`
+    }).show()
+  })
+
+  autoUpdater.on('update-not-available', () => {
+    log('autoUpdater: up to date')
+    broadcastToWindows('update-status', { state: 'not-available' })
+  })
+
+  autoUpdater.on('download-progress', (progress) => {
+    broadcastToWindows('update-status', { state: 'downloading', percent: Math.round(progress.percent) })
+  })
+
+  autoUpdater.on('update-downloaded', (info) => {
+    log('autoUpdater: update downloaded', info.version)
+    updateDownloaded = true
+    broadcastToWindows('update-status', { state: 'downloaded', version: info.version })
+    new Notification({
+      title: 'Claude Usage HUD',
+      body: `v${info.version} のダウンロード完了。トレイメニューから再起動して適用できます。`
+    }).show()
+  })
+
+  autoUpdater.on('error', (err) => {
+    log('autoUpdater: error', err.message)
+    broadcastToWindows('update-status', { state: 'error', message: err.message })
+  })
+
+  // 起動30秒後に初回チェック、その後4時間ごと
+  const scheduleUpdateCheck = (): void => {
+    if (updateCheckTimer) clearInterval(updateCheckTimer)
+    const settings = loadSettings()
+    if (!(settings.autoUpdate ?? true)) return
+
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch(e => log('autoUpdater initial check error:', e))
+      updateCheckTimer = setInterval(() => {
+        const s = loadSettings()
+        if (s.autoUpdate ?? true) {
+          autoUpdater.checkForUpdates().catch(e => log('autoUpdater periodic check error:', e))
+        }
+      }, 4 * 60 * 60 * 1000)
+    }, 30 * 1000)
+  }
+
+  scheduleUpdateCheck()
+}
 
 // ---- Local API Server (localhost only, for Claude Code skill integration) ----
 
@@ -504,6 +596,7 @@ if (!gotTheLock) {
     createTray()
     scheduleUpdates()
     startLocalApiServer()
+    setupAutoUpdater()
   })
 
   app.on('before-quit', () => {

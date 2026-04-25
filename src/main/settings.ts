@@ -8,6 +8,7 @@ export interface Settings {
   token: string
   orgUuid?: string
   launchAtLogin: boolean
+  autoUpdate: boolean
   updateIntervalMinutes: number
   viewMode: ViewMode
   language: 'auto' | 'en' | 'ja'
@@ -45,6 +46,7 @@ export interface Settings {
 const defaultSettings: Settings = {
   token: '',
   launchAtLogin: false,
+  autoUpdate: true,
   updateIntervalMinutes: 10,
   viewMode: 'compact',
   language: 'auto',

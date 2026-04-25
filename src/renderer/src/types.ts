@@ -42,6 +42,7 @@ export type ViewMode = 'compact' | 'detail'
 export interface Settings {
   token: string
   launchAtLogin: boolean
+  autoUpdate: boolean
   updateIntervalMinutes: number
   viewMode: ViewMode
   language: 'auto' | 'en' | 'ja'
@@ -115,6 +116,19 @@ declare global {
       onModeChanged: (cb: (mode: string) => void) => () => void
       onLoginStatusChanged: (cb: (status: 'logged-in' | 'logged-out' | 'unknown') => void) => () => void
       onSettingsChanged: (cb: (s: Settings) => void) => () => void
+      getAppVersion: () => Promise<string>
+      checkForUpdates: () => Promise<void>
+      installUpdate: () => Promise<void>
+      onUpdateStatus: (cb: (status: UpdateStatus) => void) => () => void
     }
   }
+}
+
+export type UpdateState = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+
+export interface UpdateStatus {
+  state: UpdateState
+  version?: string
+  percent?: number
+  message?: string
 }

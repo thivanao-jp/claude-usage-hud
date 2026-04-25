@@ -27,8 +27,10 @@ jobs:
       - name: Add node_modules/.bin to PATH
         run: echo "${GITHUB_WORKSPACE}/node_modules/.bin" >> $GITHUB_PATH
 
-      - name: Build macOS distributable
-        run: npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish never
+      - name: Build & publish macOS
+        run: npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -53,8 +55,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Windows distributable
-        run: npm run build && npx cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish never
+      - name: Build & publish Windows
+        run: npm run build && npx cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -64,31 +68,3 @@ jobs:
             dist/*.exe
             dist/*.zip
           if-no-files-found: error
-
-  release:
-    name: Create GitHub Release
-    needs: [build-mac, build-win]
-    runs-on: ubuntu-latest
-    # タグプッシュ時のみ Release を作成
-    if: startsWith(github.ref, 'refs/tags/')
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist-mac
-          path: dist
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist-win
-          path: dist
-
-      - name: List artifacts
-        run: ls -lh dist/
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*
-          generate_release_notes: true
-          draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}

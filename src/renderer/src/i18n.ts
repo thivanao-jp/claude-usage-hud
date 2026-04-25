@@ -106,6 +106,17 @@ const en = {
   sectionStartup:      'Startup',
   launchAtLogin:       'Launch at login',
   launchAtLoginHint:   'Start Claude Usage HUD automatically when you log in to your computer.',
+  sectionUpdates:      'Updates',
+  currentVersion:      'Current version: {0}',
+  autoUpdateLabel:     'Automatically check for updates',
+  checkNow:            'Check Now',
+  updateChecking:      'Checking...',
+  updateAvailable:     'v{0} available — downloading...',
+  updateDownloading:   'Downloading... {0}%',
+  updateDownloaded:    'v{0} ready — restart to apply',
+  updateNotAvailable:  'You\'re up to date',
+  updateError:         'Update error',
+  restartToUpdate:     'Restart to Update',
 } as const
 
 const ja = {
@@ -204,6 +215,17 @@ const ja = {
   sectionStartup:      '起動設定',
   launchAtLogin:       'ログイン時に自動起動',
   launchAtLoginHint:   'コンピューターにログインしたとき、Claude Usage HUD を自動的に起動します。',
+  sectionUpdates:      'アップデート',
+  currentVersion:      '現在のバージョン: {0}',
+  autoUpdateLabel:     '自動的にアップデートを確認する',
+  checkNow:            '今すぐ確認',
+  updateChecking:      '確認中...',
+  updateAvailable:     'v{0} が利用可能 — ダウンロード中...',
+  updateDownloading:   'ダウンロード中... {0}%',
+  updateDownloaded:    'v{0} 準備完了 — 再起動して適用',
+  updateNotAvailable:  '最新バージョンです',
+  updateError:         'アップデートエラー',
+  restartToUpdate:     '再起動してアップデート',
 } satisfies typeof en
 
 const dict: Record<Lang, typeof en> = { en, ja }
