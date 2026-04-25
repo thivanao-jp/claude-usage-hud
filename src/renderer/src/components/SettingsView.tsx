@@ -7,6 +7,7 @@ import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
 
 const defaultSettings: Settings = {
   token: '',
+  launchAtLogin: false,
   updateIntervalMinutes: 10,
   viewMode: 'compact',
   language: 'auto',
@@ -21,6 +22,8 @@ const defaultSettings: Settings = {
       seven_day_sonnet: false,
       seven_day_cowork: false,
       seven_day_omelette: false,
+      iguana_necktie: false,
+      omelette_promotional: false,
     },
   },
   window: { opacity: 90, alwaysOnTop: true },
@@ -211,6 +214,17 @@ export function SettingsView({ onSettingsChange }: Props) {
             style={{ width: '100%' }}
           />
         </div>
+      </Section>
+
+      {/* Startup */}
+      <Section title={t('sectionStartup')} th={th}>
+        <CheckRow
+          label={t('launchAtLogin')}
+          checked={s.launchAtLogin ?? false}
+          onChange={v => upd(p => ({ ...p, launchAtLogin: v }))}
+          th={th}
+        />
+        <div style={{ fontSize: 11, color: th.textFaint2, marginTop: 4 }}>{t('launchAtLoginHint')}</div>
       </Section>
 
       {/* Alerts */}

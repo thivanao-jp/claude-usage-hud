@@ -19,6 +19,8 @@ export interface UsageData {
   seven_day_sonnet: UsageEntry | null
   seven_day_cowork: UsageEntry | null
   seven_day_omelette: UsageEntry | null
+  iguana_necktie: UsageEntry | null
+  omelette_promotional: UsageEntry | null
   extra_usage: ExtraUsage | null
 }
 
@@ -39,6 +41,7 @@ export type ViewMode = 'compact' | 'detail'
 
 export interface Settings {
   token: string
+  launchAtLogin: boolean
   updateIntervalMinutes: number
   viewMode: ViewMode
   language: 'auto' | 'en' | 'ja'
@@ -82,6 +85,8 @@ export interface HistoryRow {
   seven_day_sonnet: number | null
   seven_day_cowork: number | null
   seven_day_omelette: number | null
+  iguana_necktie: number | null
+  omelette_promotional: number | null
   extra_usage: number | null
 }
 

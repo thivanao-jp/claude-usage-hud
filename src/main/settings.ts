@@ -7,6 +7,7 @@ export type ViewMode = 'compact' | 'detail'
 export interface Settings {
   token: string
   orgUuid?: string
+  launchAtLogin: boolean
   updateIntervalMinutes: number
   viewMode: ViewMode
   language: 'auto' | 'en' | 'ja'
@@ -43,6 +44,7 @@ export interface Settings {
 
 const defaultSettings: Settings = {
   token: '',
+  launchAtLogin: false,
   updateIntervalMinutes: 10,
   viewMode: 'compact',
   language: 'auto',
@@ -57,6 +59,8 @@ const defaultSettings: Settings = {
       seven_day_sonnet: false,
       seven_day_cowork: false,
       seven_day_omelette: false,
+      iguana_necktie: false,
+      omelette_promotional: false,
     },
   },
   window: {
@@ -101,6 +105,8 @@ export function loadSettings(): Settings {
         seven_day_sonnet: t.showSonnet ?? false,
         seven_day_cowork: false,
         seven_day_omelette: false,
+        iguana_necktie: false,
+        omelette_promotional: false,
       }
     }
     return merged

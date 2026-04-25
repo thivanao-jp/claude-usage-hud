@@ -22,6 +22,8 @@ export interface UsageData {
   seven_day_sonnet: UsageEntry | null
   seven_day_cowork: UsageEntry | null
   seven_day_omelette: UsageEntry | null
+  iguana_necktie: UsageEntry | null
+  omelette_promotional: UsageEntry | null
   extra_usage: ExtraUsage | null
 }
 

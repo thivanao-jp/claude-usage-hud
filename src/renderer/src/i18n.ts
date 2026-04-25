@@ -103,6 +103,9 @@ const en = {
   themeDark:           'Dark',
   themeLight:          'Light',
   fieldUnavailable:    'Not available on your plan',
+  sectionStartup:      'Startup',
+  launchAtLogin:       'Launch at login',
+  launchAtLoginHint:   'Start Claude Usage HUD automatically when you log in to your computer.',
 } as const
 
 const ja = {
@@ -198,6 +201,9 @@ const ja = {
   themeDark:           'ダーク',
   themeLight:          'ライト',
   fieldUnavailable:    'このプランでは利用不可',
+  sectionStartup:      '起動設定',
+  launchAtLogin:       'ログイン時に自動起動',
+  launchAtLoginHint:   'コンピューターにログインしたとき、Claude Usage HUD を自動的に起動します。',
 } satisfies typeof en
 
 const dict: Record<Lang, typeof en> = { en, ja }

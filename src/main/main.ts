@@ -394,6 +394,7 @@ ipcMain.handle('get-history', (_e, days: number) => getUsageHistory(days))
 ipcMain.handle('get-settings', () => loadSettings())
 ipcMain.handle('save-settings', (_e, settings: Settings) => {
   saveSettings(settings)
+  app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin ?? false })
   scheduleUpdates()
   if (hudWindow && !hudWindow.isDestroyed()) {
     const s = loadSettings()
@@ -474,6 +475,13 @@ if (!gotTheLock) {
 
     // 起動時にキャッシュ済み orgUuid を復元
     const initialSettings = loadSettings()
+
+    // システム側の launch-at-login 状態を設定ファイルに同期
+    const systemLaunchAtLogin = app.getLoginItemSettings().openAtLogin
+    if (systemLaunchAtLogin !== (initialSettings.launchAtLogin ?? false)) {
+      initialSettings.launchAtLogin = systemLaunchAtLogin
+      saveSettings(initialSettings)
+    }
     if (initialSettings.orgUuid) {
       claudeWebFetcher.setInitialOrgUuid(initialSettings.orgUuid)
       log('Restored cached orgUuid:', initialSettings.orgUuid)

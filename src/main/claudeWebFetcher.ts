@@ -324,6 +324,8 @@ function mapUsage(raw: unknown): UsageData | null {
     seven_day_sonnet: entry(src, 'seven_day_sonnet'),
     seven_day_cowork: entry(src, 'seven_day_cowork'),
     seven_day_omelette: entry(src, 'seven_day_omelette'),
+    iguana_necktie: entry(src, 'iguana_necktie'),
+    omelette_promotional: entry(src, 'omelette_promotional'),
     extra_usage,
   }
 
