@@ -1,6 +1,6 @@
 {
   "name": "claude-usage-hud",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Claude usage monitor HUD - menubar + floating window",
   "main": "out/main/main.js",
   "scripts": {
@@ -70,8 +70,13 @@
           ]
         }
       ],
-      "hardenedRuntime": false,
-      "gatekeeperAssess": false
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": {
+        "teamId": "6XVANU7F58"
+      }
     },
     "dmg": {
       "title": "Claude Usage HUD",

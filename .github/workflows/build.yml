@@ -28,9 +28,14 @@ jobs:
         run: echo "${GITHUB_WORKSPACE}/node_modules/.bin" >> $GITHUB_PATH
 
       - name: Build & publish macOS
-        run: npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
+        run: npm run build && electron-builder --mac --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
