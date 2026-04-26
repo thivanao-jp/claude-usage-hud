@@ -5,12 +5,21 @@ module.exports = async function afterSign(context) {
   const { electronPlatformName, appOutDir } = context
   if (electronPlatformName !== 'darwin') return
 
+  // APIキー方式（推奨）
+  const apiKey = process.env.APPLE_API_KEY
+  const apiKeyId = process.env.APPLE_API_KEY_ID
+  const apiIssuer = process.env.APPLE_API_ISSUER
+
+  // Apple ID方式（フォールバック）
   const appleId = process.env.APPLE_ID
   const appleIdPassword = process.env.APPLE_APP_SPECIFIC_PASSWORD
   const teamId = process.env.APPLE_TEAM_ID
 
-  if (!appleId || !appleIdPassword || !teamId) {
-    console.log('notarize: skipped (credentials not set)')
+  const hasApiKey = apiKey && apiKeyId && apiIssuer
+  const hasAppleId = appleId && appleIdPassword && teamId
+
+  if (!hasApiKey && !hasAppleId) {
+    console.log('notarize: skipped (no credentials set)')
     return
   }
 
@@ -18,14 +27,14 @@ module.exports = async function afterSign(context) {
   const appPath = `${appOutDir}/${appName}.app`
   const zipPath = `/tmp/${appName}-notarize.zip`
 
-  // zip化
   console.log(`notarize: zipping ${appPath}`)
   execSync(`ditto -c -k --sequesterRsrc --keepParent "${appPath}" "${zipPath}"`)
 
-  const auth = `--apple-id "${appleId}" --password "${appleIdPassword}" --team-id "${teamId}"`
+  const auth = hasApiKey
+    ? `--key "${apiKey}" --key-id "${apiKeyId}" --issuer "${apiIssuer}"`
+    : `--apple-id "${appleId}" --password "${appleIdPassword}" --team-id "${teamId}"`
 
-  // --no-wait でsubmit → IDを取得
-  console.log('notarize: submitting to Apple (no-wait)...')
+  console.log(`notarize: submitting (${hasApiKey ? 'API Key' : 'Apple ID'})...`)
   const submitOut = execSync(
     `xcrun notarytool submit "${zipPath}" ${auth} --output-format json --no-wait`
   ).toString()
@@ -33,11 +42,9 @@ module.exports = async function afterSign(context) {
   const submissionId = submitted.id
   console.log(`notarize: submitted. id=${submissionId}`)
 
-  // 1分ごとにポーリング（最大40分）
   const MAX_MINUTES = 40
   for (let i = 1; i <= MAX_MINUTES; i++) {
     await new Promise(r => setTimeout(r, 60 * 1000))
-
     const infoOut = execSync(
       `xcrun notarytool info "${submissionId}" ${auth} --output-format json`
     ).toString()
@@ -48,7 +55,7 @@ module.exports = async function afterSign(context) {
       console.log('notarize: accepted! stapling...')
       try {
         execSync(`xcrun stapler staple "${appPath}"`)
-        console.log('notarize: stapled successfully.')
+        console.log('notarize: stapled.')
       } catch (e) {
         console.warn('notarize: staple failed (non-fatal):', e.message)
       }
@@ -57,11 +64,8 @@ module.exports = async function afterSign(context) {
     }
 
     if (info.status === 'Invalid' || info.status === 'Rejected') {
-      // Appleの詳細ログを取得
       try {
-        const logOut = execSync(
-          `xcrun notarytool log "${submissionId}" ${auth}`
-        ).toString()
+        const logOut = execSync(`xcrun notarytool log "${submissionId}" ${auth}`).toString()
         console.error('notarize: Apple rejection log:\n', logOut)
       } catch {}
       try { fs.unlinkSync(zipPath) } catch {}
@@ -70,5 +74,5 @@ module.exports = async function afterSign(context) {
   }
 
   try { fs.unlinkSync(zipPath) } catch {}
-  throw new Error(`Notarization timed out after ${MAX_MINUTES} minutes. submissionId=${submissionId}`)
+  throw new Error(`Notarization timed out after ${MAX_MINUTES} minutes. id=${submissionId}`)
 }
