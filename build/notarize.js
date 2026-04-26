@@ -49,7 +49,7 @@ module.exports = async function afterSign(context) {
   const submissionId = submitted.id
   console.log(`notarize: submitted. id=${submissionId}`)
 
-  const MAX_MINUTES = 40
+  const MAX_MINUTES = 90
   for (let i = 1; i <= MAX_MINUTES; i++) {
     await new Promise(r => setTimeout(r, 60 * 1000))
     const infoOut = execSync(
