@@ -30,9 +30,16 @@ module.exports = async function afterSign(context) {
   console.log(`notarize: zipping ${appPath}`)
   execSync(`ditto -c -k --sequesterRsrc --keepParent "${appPath}" "${zipPath}"`)
 
-  const auth = hasApiKey
-    ? `--key "${apiKey}" --key-id "${apiKeyId}" --issuer "${apiIssuer}"`
-    : `--apple-id "${appleId}" --password "${appleIdPassword}" --team-id "${teamId}"`
+  let tmpKeyPath = null
+  let auth
+  if (hasApiKey) {
+    // --key はファイルパス指定のため、シークレットの中身を一時ファイルに書き出す
+    tmpKeyPath = `/tmp/AuthKey_${apiKeyId}.p8`
+    fs.writeFileSync(tmpKeyPath, apiKey, { mode: 0o600 })
+    auth = `--key "${tmpKeyPath}" --key-id "${apiKeyId}" --issuer "${apiIssuer}"`
+  } else {
+    auth = `--apple-id "${appleId}" --password "${appleIdPassword}" --team-id "${teamId}"`
+  }
 
   console.log(`notarize: submitting (${hasApiKey ? 'API Key' : 'Apple ID'})...`)
   const submitOut = execSync(
@@ -60,6 +67,7 @@ module.exports = async function afterSign(context) {
         console.warn('notarize: staple failed (non-fatal):', e.message)
       }
       try { fs.unlinkSync(zipPath) } catch {}
+      if (tmpKeyPath) try { fs.unlinkSync(tmpKeyPath) } catch {}
       return
     }
 
@@ -69,10 +77,12 @@ module.exports = async function afterSign(context) {
         console.error('notarize: Apple rejection log:\n', logOut)
       } catch {}
       try { fs.unlinkSync(zipPath) } catch {}
+      if (tmpKeyPath) try { fs.unlinkSync(tmpKeyPath) } catch {}
       throw new Error(`Notarization ${info.status}: submissionId=${submissionId}`)
     }
   }
 
   try { fs.unlinkSync(zipPath) } catch {}
+  if (tmpKeyPath) try { fs.unlinkSync(tmpKeyPath) } catch {}
   throw new Error(`Notarization timed out after ${MAX_MINUTES} minutes. id=${submissionId}`)
 }
