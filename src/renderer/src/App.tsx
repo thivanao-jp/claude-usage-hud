@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { DetailView } from './components/DetailView'
 import { CompactView } from './components/CompactView'
 import { SettingsView } from './components/SettingsView'
-import { UsageData, ProfileData, Settings, ViewMode } from './types'
+import { UsageData, ProfileData, Settings, ViewMode, BetaProvidersData } from './types'
 import { LangContext, useT } from './LangContext'
 import { ThemeContext } from './ThemeContext'
 import { resolveLang } from './i18n'
@@ -43,6 +43,7 @@ function HudApp() {
   const [mode, setMode] = useState<ViewMode>('compact')
   const [lastSuccessAt, setLastSuccessAt] = useState<Date | null>(null)
   const [isStale, setIsStale] = useState(false)
+  const [beta, setBeta] = useState<BetaProvidersData>({ copilot: null, codex: null })
 
   useEffect(() => {
     window.api.getUsage().then(({ usage, profile }) => {
@@ -53,12 +54,14 @@ function HudApp() {
       setSettings(s)
       setMode(s.viewMode ?? 'compact')
     })
+    window.api.getBetaData().then(setBeta).catch(() => {})
 
-    const unsubUsage = window.api.onUsageUpdate(({ usage, profile, lastSuccessAt, isStale }) => {
+    const unsubUsage = window.api.onUsageUpdate(({ usage, profile, lastSuccessAt, isStale, beta }) => {
       setUsage(usage)
       setProfile(profile)
       setIsStale(isStale)
       if (lastSuccessAt) setLastSuccessAt(new Date(lastSuccessAt))
+      if (beta) setBeta(beta)
     })
     const unsubMode = window.api.onModeChanged(m => setMode(m as ViewMode))
     const unsubSettings = window.api.onSettingsChanged(s => setSettings(s as Settings))
@@ -76,6 +79,7 @@ function HudApp() {
       <CompactView
         usage={usage}
         settings={settings}
+        beta={beta}
         lastSuccessAt={lastSuccessAt}
         isStale={isStale}
         onRefresh={() => window.api.refresh()}

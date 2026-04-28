@@ -139,6 +139,7 @@ declare global {
         profile: ProfileData
         lastSuccessAt: string | null
         isStale: boolean
+        beta?: BetaProvidersData
       }) => void) => () => void
       onModeChanged: (cb: (mode: string) => void) => () => void
       onLoginStatusChanged: (cb: (status: 'logged-in' | 'logged-out' | 'unknown') => void) => () => void

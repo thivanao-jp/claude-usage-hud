@@ -85,10 +85,13 @@ const COMPACT_PAD = 8      // 上下パディング合計
 
 function getCompactHeight(settings: Settings): number {
   const showFields = settings.tray.showFields ?? {}
+  const bp = settings.betaProviders ?? {}
   const count = [
     settings.tray.show5h,
     ...WEEKLY_FIELD_DEFS.map(f => showFields[f.key] ?? false),
     settings.tray.showExtra,
+    bp.copilot?.enabled ?? false,
+    bp.codex?.enabled ?? false,
   ].filter(Boolean).length || 1
   return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD
 }

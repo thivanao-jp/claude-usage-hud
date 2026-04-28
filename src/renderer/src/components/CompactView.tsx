@@ -1,4 +1,4 @@
-import { UsageData, Settings, ExtraUsage, UsageEntry } from '../types'
+import { UsageData, Settings, ExtraUsage, UsageEntry, BetaProvidersData } from '../types'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { calcPacePct } from '../paceUtil'
@@ -7,6 +7,7 @@ import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
 interface Props {
   usage: UsageData | null
   settings: Settings
+  beta?: BetaProvidersData
   lastSuccessAt: Date | null
   isStale: boolean
   onSwitchToDetail: () => void
@@ -60,7 +61,7 @@ function formatUpdatedAt(d: Date | null): string {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchToDetail, onRefresh }: Props) {
+export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onSwitchToDetail, onRefresh }: Props) {
   const t = useT()
   const th = useTheme()
 
@@ -191,6 +192,50 @@ export function CompactView({ usage, settings, lastSuccessAt, isStale, onSwitchT
             </div>
           )
         })}
+
+        {/* Beta provider bars */}
+        {settings.betaProviders?.copilot?.enabled && (() => {
+          const d = beta?.copilot ?? null
+          const pct = d ? Math.min(Math.round(d.utilization), 100) : 0
+          const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : '#6e9ee8'
+          const { date, time, rel } = formatReset(d?.resetDate ?? null, t('timeNow'))
+          return (
+            <div style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
+              <div style={{ position: 'relative', height: 34, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
+                <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
+                <div style={barTextStyle}>
+                  <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>CP β</span>
+                  <span style={{ width: 72, flexShrink: 0 }}>{d ? date : '—'}</span>
+                  <span style={{ width: 44, flexShrink: 0 }}>{d ? time : ''}</span>
+                  <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{d ? rel.major : ''}</span>
+                  <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{d ? rel.minor : ''}</span>
+                  <span style={{ flex: 1, textAlign: 'right' }}>{d ? `${pct}%` : '—'}</span>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+        {settings.betaProviders?.codex?.enabled && (() => {
+          const d = beta?.codex ?? null
+          const pct = d ? Math.min(Math.round(d.utilization), 100) : 0
+          const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : '#10a37f'
+          const { date, time, rel } = formatReset(d?.resetDate ?? null, t('timeNow'))
+          return (
+            <div style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
+              <div style={{ position: 'relative', height: 34, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
+                <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
+                <div style={barTextStyle}>
+                  <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>CX β</span>
+                  <span style={{ width: 72, flexShrink: 0 }}>{d ? date : '—'}</span>
+                  <span style={{ width: 44, flexShrink: 0 }}>{d ? time : ''}</span>
+                  <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{d ? rel.major : ''}</span>
+                  <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{d ? rel.minor : ''}</span>
+                  <span style={{ flex: 1, textAlign: 'right' }}>{d ? `${pct}%` : '—'}</span>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Extra usage bar */}
         {showExtraBar && (() => {
