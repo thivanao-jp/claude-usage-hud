@@ -73,3 +73,28 @@ export async function fetchProfile(token: string): Promise<ProfileData> {
   if (!res.ok) throw new ApiError(`Profile API ${res.status}: ${await res.text()}`, res.status)
   return res.json() as Promise<ProfileData>
 }
+
+// ---- Beta Providers ----
+
+export interface CopilotUsageData {
+  used: number
+  limit: number
+  utilization: number
+  resetDate: string | null
+  planType: string
+}
+
+export interface CodexUsageData {
+  used: number
+  limit: number
+  utilization: number      // 7d secondary window
+  resetDate: string | null
+  unit: string
+  fiveHourUtilization: number | null      // 5h primary window
+  fiveHourResetDate: string | null
+}
+
+export interface BetaProvidersData {
+  copilot: CopilotUsageData | null
+  codex: CodexUsageData | null
+}

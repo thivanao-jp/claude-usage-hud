@@ -117,6 +117,22 @@ const en = {
   updateNotAvailable:  'You\'re up to date',
   updateError:         'Update error',
   restartToUpdate:     'Restart to Update',
+
+  // ---- Beta Providers ----
+  sectionBeta:             'Beta Providers (Experimental)',
+  betaHint:                'Experimental: fetch usage limits from other AI services. APIs are unofficial and may change without notice.',
+  betaCopilotLabel:        'GitHub Copilot',
+  betaCopilotDesc:         'Monthly premium requests limit (requires gh CLI login)',
+  betaCodexLabel:          'OpenAI Codex',
+  betaCodexDesc:           'Monthly usage limit (requires ChatGPT session)',
+  betaEnabled:             'Enable',
+  betaLoginBtn:            'Login',
+  betaLoggedIn:            'Logged in',
+  betaNotLoggedIn:         'Not logged in',
+  betaStatusUnknown:       'Unknown',
+  betaDataUnavailable:     'Data unavailable — API may have changed',
+  betaMonthlyUsed:         '{0} / {1} {2} used',
+  betaResetLabel:          'Resets:',
 } as const
 
 const ja = {
@@ -226,6 +242,22 @@ const ja = {
   updateNotAvailable:  '最新バージョンです',
   updateError:         'アップデートエラー',
   restartToUpdate:     '再起動してアップデート',
+
+  // ---- Beta Providers ----
+  sectionBeta:             'β プロバイダー (試験的)',
+  betaHint:                '試験的機能: 他のAIサービスの使用量リミットを取得します。非公式APIを使用しており、予告なく変更される場合があります。',
+  betaCopilotLabel:        'GitHub Copilot',
+  betaCopilotDesc:         '月間プレミアムリクエスト数リミット (gh CLI ログインが必要)',
+  betaCodexLabel:          'OpenAI Codex',
+  betaCodexDesc:           '月間使用量リミット (ChatGPT セッションが必要)',
+  betaEnabled:             '有効にする',
+  betaLoginBtn:            'ログイン',
+  betaLoggedIn:            'ログイン済み',
+  betaNotLoggedIn:         '未ログイン',
+  betaStatusUnknown:       '状態不明',
+  betaDataUnavailable:     'データ取得不可 — APIが変更された可能性があります',
+  betaMonthlyUsed:         '{0} / {1} {2} 使用',
+  betaResetLabel:          'リセット:',
 } satisfies typeof en
 
 const dict: Record<Lang, typeof en> = { en, ja }

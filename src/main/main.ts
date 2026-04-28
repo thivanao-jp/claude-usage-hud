@@ -15,11 +15,13 @@ import { createServer as createHttpServer, IncomingMessage, ServerResponse } fro
 import { is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
 import { loadSettings, saveSettings, Settings, ViewMode } from './settings'
-import { UsageData, ProfileData, UsageEntry } from './claudeApi'
+import { UsageData, ProfileData, UsageEntry, BetaProvidersData } from './claudeApi'
 import { WEEKLY_FIELD_DEFS } from './fieldDefs'
 import { saveUsageHistory, getUsageHistory } from './db'
 import { getTokenFromCredentials } from './credentials'
 import { ClaudeWebFetcher } from './claudeWebFetcher'
+import { GitHubCopilotFetcher } from './githubCopilotFetcher'
+import { CodexFetcher } from './codexFetcher'
 import { createBarIcon } from './trayIcon'
 
 // stdoutがバッファリングされることがあるため、ログは直接ファイルに書き込む
@@ -42,10 +44,13 @@ let updateCheckTimer: ReturnType<typeof setInterval> | null = null
 let updateDownloaded = false
 
 const claudeWebFetcher = new ClaudeWebFetcher()
+const copilotFetcher = new GitHubCopilotFetcher()
+const codexFetcher = new CodexFetcher()
 
 let lastUsage: UsageData | null = null
 let lastProfile: ProfileData | null = null
 let lastSuccessAt: Date | null = null
+let lastBeta: BetaProvidersData = { copilot: null, codex: null }
 
 // ---- Display Helper ----
 
@@ -72,7 +77,8 @@ function isPositionOnSomeDisplay(x: number, y: number): boolean {
 // ---- Window Size ----
 
 const DETAIL_W = 360
-const DETAIL_H = 580
+const DETAIL_H_BASE = 580
+const DETAIL_BETA_H = 88  // βカード1枚あたりの追加高さ
 const COMPACT_W = 320
 const COMPACT_BAR_H = 46   // 1本のバーの高さ（ペースライン含む）
 const COMPACT_BTN_H = 28   // ボタン行の高さ
@@ -80,18 +86,29 @@ const COMPACT_PAD = 8      // 上下パディング合計
 
 function getCompactHeight(settings: Settings): number {
   const showFields = settings.tray.showFields ?? {}
+  const bp = settings.betaProviders ?? {}
   const count = [
     settings.tray.show5h,
     ...WEEKLY_FIELD_DEFS.map(f => showFields[f.key] ?? false),
     settings.tray.showExtra,
+    bp.copilot?.enabled ?? false,
+    bp.codex?.enabled ?? false,  // 5h bar
+    bp.codex?.enabled ?? false,  // 7d bar (Codex is always 2 bars)
   ].filter(Boolean).length || 1
   return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD
+}
+
+function getDetailHeight(settings: Settings): number {
+  const bp = settings.betaProviders ?? {}
+  // Codex は 5h + 7d で2枚になるためカウント2
+  const betaCount = (bp.copilot?.enabled ? 1 : 0) + (bp.codex?.enabled ? 2 : 0)
+  return DETAIL_H_BASE + betaCount * DETAIL_BETA_H
 }
 
 function getWindowSize(mode: ViewMode, settings: Settings): { w: number; h: number } {
   return mode === 'compact'
     ? { w: COMPACT_W, h: getCompactHeight(settings) }
-    : { w: DETAIL_W, h: DETAIL_H }
+    : { w: DETAIL_W, h: getDetailHeight(settings) }
 }
 
 // ---- HUD Window ----
@@ -321,6 +338,7 @@ function sendToHud(isStale: boolean): void {
     profile: lastProfile,
     lastSuccessAt: lastSuccessAt?.toISOString() ?? null,
     isStale,
+    beta: lastBeta,
   })
 }
 
@@ -354,6 +372,33 @@ async function doUpdate(): Promise<void> {
   }
 }
 
+async function doUpdateBeta(): Promise<void> {
+  const settings = loadSettings()
+  const bp = settings.betaProviders ?? {}
+  const results: BetaProvidersData = { copilot: null, codex: null }
+
+  if (bp.copilot?.enabled) {
+    try {
+      results.copilot = await copilotFetcher.fetchData()
+      log('doUpdateBeta: copilot=', results.copilot)
+    } catch (e) {
+      log('doUpdateBeta: copilot error:', e)
+    }
+  }
+
+  if (bp.codex?.enabled) {
+    try {
+      results.codex = await codexFetcher.fetchData()
+      log('doUpdateBeta: codex=', results.codex)
+    } catch (e) {
+      log('doUpdateBeta: codex error:', e)
+    }
+  }
+
+  lastBeta = results
+  sendToHud(lastUsage == null)
+}
+
 function scheduleUpdates(): void {
   if (updateTimer) clearInterval(updateTimer)
 
@@ -362,7 +407,9 @@ function scheduleUpdates(): void {
 
   // 起動直後の即時呼び出しは429になりやすいので3秒後に初回実行
   setTimeout(doUpdate, 3000)
-  updateTimer = setInterval(doUpdate, intervalMs)
+  // Beta providers は Claude より少し遅らせて起動直後の負荷を分散
+  setTimeout(doUpdateBeta, 8000)
+  updateTimer = setInterval(() => { doUpdate(); doUpdateBeta() }, intervalMs)
 }
 
 // ---- Alerts ----
@@ -414,10 +461,8 @@ ipcMain.handle('save-settings', (_e, settings: Settings) => {
     const s = loadSettings()
     hudWindow.setAlwaysOnTop(s.window.alwaysOnTop)
     hudWindow.setOpacity(s.window.opacity / 100)
-    if (s.viewMode === 'compact') {
-      const { w, h } = getWindowSize('compact', s)
-      hudWindow.setSize(w, h)
-    }
+    const { w, h } = getWindowSize(s.viewMode, s)
+    hudWindow.setSize(w, h)
     // 言語変更等を HUD に即時反映
     hudWindow.webContents.send('settings-changed', s)
   }
@@ -434,6 +479,14 @@ ipcMain.handle('get-login-status', () => claudeWebFetcher.getLoginStatus())
 ipcMain.handle('get-app-version', () => app.getVersion())
 ipcMain.handle('check-for-updates', () => autoUpdater.checkForUpdates().catch(e => log('update check error:', e)))
 ipcMain.handle('install-update', () => autoUpdater.quitAndInstall())
+// Beta providers
+ipcMain.handle('get-beta-data', () => lastBeta)
+ipcMain.handle('get-copilot-login-status', () => copilotFetcher.getLoginStatus())
+ipcMain.handle('get-codex-login-status', () => codexFetcher.getLoginStatus())
+ipcMain.handle('show-copilot-login-window', () => copilotFetcher.showLoginWindow())
+ipcMain.handle('hide-copilot-login-window', () => copilotFetcher.hideLoginWindow())
+ipcMain.handle('show-codex-login-window', () => codexFetcher.showLoginWindow())
+ipcMain.handle('hide-codex-login-window', () => codexFetcher.hideLoginWindow())
 
 // ---- App Lifecycle ----
 
@@ -564,6 +617,14 @@ if (!gotTheLock) {
     app.dock?.hide()
 
     claudeWebFetcher.setLogCallback(log)
+    copilotFetcher.setLogCallback(log)
+    codexFetcher.setLogCallback(log)
+    copilotFetcher.setStatusChangeCallback((status) => {
+      log('copilot login status changed:', status)
+    })
+    codexFetcher.setStatusChangeCallback((status) => {
+      log('codex login status changed:', status)
+    })
 
     // 起動時にキャッシュ済み orgUuid を復元
     const initialSettings = loadSettings()
@@ -601,6 +662,8 @@ if (!gotTheLock) {
 
   app.on('before-quit', () => {
     claudeWebFetcher.destroy()
+    copilotFetcher.destroy()
+    codexFetcher.destroy()
   })
 
   app.on('window-all-closed', (e) => { e.preventDefault() })

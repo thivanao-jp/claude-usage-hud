@@ -36,5 +36,13 @@ contextBridge.exposeInMainWorld('api', {
   onUpdateStatus: (cb: (status: unknown) => void) => {
     ipcRenderer.on('update-status', (_e, status) => cb(status))
     return () => ipcRenderer.removeAllListeners('update-status')
-  }
+  },
+  // Beta providers
+  getBetaData: () => ipcRenderer.invoke('get-beta-data'),
+  getCopilotLoginStatus: () => ipcRenderer.invoke('get-copilot-login-status'),
+  getCodexLoginStatus: () => ipcRenderer.invoke('get-codex-login-status'),
+  showCopilotLoginWindow: () => ipcRenderer.invoke('show-copilot-login-window'),
+  hideCopilotLoginWindow: () => ipcRenderer.invoke('hide-copilot-login-window'),
+  showCodexLoginWindow: () => ipcRenderer.invoke('show-codex-login-window'),
+  hideCodexLoginWindow: () => ipcRenderer.invoke('hide-codex-login-window'),
 })

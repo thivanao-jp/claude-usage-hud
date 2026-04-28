@@ -75,6 +75,35 @@ export interface Settings {
     workDayEnd: number
     excludeWeekends: boolean
   }
+  betaProviders?: {
+    copilot?: { enabled: boolean }
+    codex?: { enabled: boolean }
+  }
+}
+
+// ---- Beta Providers ----
+
+export interface CopilotUsageData {
+  used: number
+  limit: number
+  utilization: number
+  resetDate: string | null
+  planType: string
+}
+
+export interface CodexUsageData {
+  used: number
+  limit: number
+  utilization: number      // 7d secondary window
+  resetDate: string | null
+  unit: string
+  fiveHourUtilization: number | null      // 5h primary window
+  fiveHourResetDate: string | null
+}
+
+export interface BetaProvidersData {
+  copilot: CopilotUsageData | null
+  codex: CodexUsageData | null
 }
 
 export interface HistoryRow {
@@ -112,6 +141,7 @@ declare global {
         profile: ProfileData
         lastSuccessAt: string | null
         isStale: boolean
+        beta?: BetaProvidersData
       }) => void) => () => void
       onModeChanged: (cb: (mode: string) => void) => () => void
       onLoginStatusChanged: (cb: (status: 'logged-in' | 'logged-out' | 'unknown') => void) => () => void
@@ -120,6 +150,14 @@ declare global {
       checkForUpdates: () => Promise<void>
       installUpdate: () => Promise<void>
       onUpdateStatus: (cb: (status: UpdateStatus) => void) => () => void
+      // Beta providers
+      getBetaData: () => Promise<BetaProvidersData>
+      getCopilotLoginStatus: () => Promise<'logged-in' | 'logged-out' | 'unknown'>
+      getCodexLoginStatus: () => Promise<'logged-in' | 'logged-out' | 'unknown'>
+      showCopilotLoginWindow: () => Promise<void>
+      hideCopilotLoginWindow: () => Promise<void>
+      showCodexLoginWindow: () => Promise<void>
+      hideCodexLoginWindow: () => Promise<void>
     }
   }
 }

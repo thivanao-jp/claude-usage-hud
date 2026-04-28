@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { UsageData, ProfileData, ExtraUsage, Settings, UsageEntry } from '../types'
+import { useState, useEffect } from 'react'
+import { UsageData, ProfileData, ExtraUsage, Settings, UsageEntry, BetaProvidersData, CopilotUsageData, CodexUsageData } from '../types'
 import { UsageCard } from './UsageCard'
 import { HistoryChart } from './HistoryChart'
 import { useT } from '../LangContext'
@@ -57,6 +57,11 @@ export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, o
   const lang = useLang()
   const [showChart, setShowChart] = useState(false)
   const [chartDays, setChartDays] = useState(7)
+  const [beta, setBeta] = useState<BetaProvidersData>({ copilot: null, codex: null })
+
+  useEffect(() => {
+    window.api.getBetaData().then(setBeta).catch(() => {})
+  }, [usage])
 
   function formatAge(d: Date | null): string {
     if (!d) return t('unknown')
@@ -152,6 +157,49 @@ export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, o
         )}
       </div>
 
+      {/* Beta Provider Cards */}
+      {(settings.betaProviders?.copilot?.enabled || settings.betaProviders?.codex?.enabled) && (
+        <div style={{ padding: '0 10px 4px' }}>
+          <div style={{ fontSize: 10, color: th.textMuted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4, paddingLeft: 2 }}>
+            β Providers
+          </div>
+          {settings.betaProviders?.copilot?.enabled && (
+            <BetaUsageCard
+              label="GitHub Copilot"
+              data={beta.copilot}
+              color="#6e9ee8"
+              unit="requests"
+            />
+          )}
+          {settings.betaProviders?.codex?.enabled && (
+            <>
+              {beta.codex?.fiveHourUtilization != null && (
+                <BetaUsageCard
+                  label="OpenAI Codex (5h)"
+                  data={{
+                    used: Math.round(beta.codex.fiveHourUtilization),
+                    limit: 100,
+                    utilization: beta.codex.fiveHourUtilization,
+                    resetDate: beta.codex.fiveHourResetDate,
+                    unit: '5h',
+                    fiveHourUtilization: null,
+                    fiveHourResetDate: null,
+                  }}
+                  color="#10a37f"
+                  unit="5h"
+                />
+              )}
+              <BetaUsageCard
+                label={beta.codex?.fiveHourUtilization != null ? 'OpenAI Codex (7d)' : 'OpenAI Codex'}
+                data={beta.codex}
+                color="#10a37f"
+                unit={beta.codex?.unit ?? '%'}
+              />
+            </>
+          )}
+        </div>
+      )}
+
       {/* History */}
       <div style={{ borderTop: `1px solid ${th.borderSection}`, padding: '6px 12px' }}>
         <button
@@ -234,6 +282,51 @@ function ExtraUsageCard({ extra }: { extra: ExtraUsage }) {
         <span style={{ color: th.textMuted }}>{t('monthlyReset')}</span>
       </div>
       <div style={{ fontSize: 10, color: th.textDesc, marginTop: 3 }}>{t('descExtra')}</div>
+    </div>
+  )
+}
+
+function BetaUsageCard({ label, data, color, unit }: { label: string; data: CopilotUsageData | CodexUsageData | null; color: string; unit: string }) {
+  const t = useT()
+  const th = useTheme()
+
+  if (!data) {
+    return (
+      <div style={{ background: th.bgCardExtra, border: `1px solid ${th.borderCardExtra}`, borderRadius: 8, padding: '7px 10px', marginBottom: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: th.textSub }}>{label}</span>
+          <span style={{ fontSize: 10, color: '#e0a12b', background: '#e0a12b18', border: '1px solid #e0a12b33', borderRadius: 4, padding: '1px 6px' }}>β</span>
+        </div>
+        <div style={{ fontSize: 11, color: th.textFaint, marginTop: 4 }}>{t('betaDataUnavailable')}</div>
+      </div>
+    )
+  }
+
+  const pct = Math.min(Math.round(data.utilization), 100)
+  const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : color
+
+  return (
+    <div style={{ background: th.bgCardExtra, border: `1px solid ${th.borderCardExtra}`, borderRadius: 8, padding: '7px 10px', marginBottom: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: th.textSub }}>{label}</span>
+          <span style={{ fontSize: 10, color: '#e0a12b', background: '#e0a12b18', border: '1px solid #e0a12b33', borderRadius: 4, padding: '1px 5px' }}>β</span>
+        </div>
+        <span style={{ fontSize: 16, fontWeight: 700, color: barColor }}>{pct}%</span>
+      </div>
+      <div style={{ background: th.bgBar, borderRadius: 3, height: 5, marginBottom: 5, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 3, transition: 'width 0.4s ease' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+        <span style={{ color: th.textMuted }}>
+          {t('betaMonthlyUsed', data.used.toLocaleString(), data.limit.toLocaleString(), unit)}
+        </span>
+        {data.resetDate && (
+          <span style={{ color: th.textMuted }}>
+            {t('betaResetLabel')} {new Date(data.resetDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+          </span>
+        )}
+      </div>
     </div>
   )
 }
