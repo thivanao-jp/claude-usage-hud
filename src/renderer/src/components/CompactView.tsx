@@ -204,7 +204,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
               <div style={{ position: 'relative', height: 34, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
                 <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
                 <div style={barTextStyle}>
-                  <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>CP β</span>
+                  <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>Cpl β</span>
                   <span style={{ width: 72, flexShrink: 0 }}>{d ? date : '—'}</span>
                   <span style={{ width: 44, flexShrink: 0 }}>{d ? time : ''}</span>
                   <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{d ? rel.major : ''}</span>
@@ -225,7 +225,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
               <div style={{ position: 'relative', height: 34, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
                 <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
                 <div style={barTextStyle}>
-                  <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>CX β</span>
+                  <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>Cdx β</span>
                   <span style={{ width: 72, flexShrink: 0 }}>{d ? date : '—'}</span>
                   <span style={{ width: 44, flexShrink: 0 }}>{d ? time : ''}</span>
                   <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{d ? rel.major : ''}</span>

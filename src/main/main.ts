@@ -77,7 +77,8 @@ function isPositionOnSomeDisplay(x: number, y: number): boolean {
 // ---- Window Size ----
 
 const DETAIL_W = 360
-const DETAIL_H = 580
+const DETAIL_H_BASE = 580
+const DETAIL_BETA_H = 88  // βカード1枚あたりの追加高さ
 const COMPACT_W = 320
 const COMPACT_BAR_H = 46   // 1本のバーの高さ（ペースライン含む）
 const COMPACT_BTN_H = 28   // ボタン行の高さ
@@ -96,10 +97,16 @@ function getCompactHeight(settings: Settings): number {
   return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD
 }
 
+function getDetailHeight(settings: Settings): number {
+  const bp = settings.betaProviders ?? {}
+  const betaCount = [bp.copilot?.enabled, bp.codex?.enabled].filter(Boolean).length
+  return DETAIL_H_BASE + betaCount * DETAIL_BETA_H
+}
+
 function getWindowSize(mode: ViewMode, settings: Settings): { w: number; h: number } {
   return mode === 'compact'
     ? { w: COMPACT_W, h: getCompactHeight(settings) }
-    : { w: DETAIL_W, h: DETAIL_H }
+    : { w: DETAIL_W, h: getDetailHeight(settings) }
 }
 
 // ---- HUD Window ----
@@ -452,10 +459,8 @@ ipcMain.handle('save-settings', (_e, settings: Settings) => {
     const s = loadSettings()
     hudWindow.setAlwaysOnTop(s.window.alwaysOnTop)
     hudWindow.setOpacity(s.window.opacity / 100)
-    if (s.viewMode === 'compact') {
-      const { w, h } = getWindowSize('compact', s)
-      hudWindow.setSize(w, h)
-    }
+    const { w, h } = getWindowSize(s.viewMode, s)
+    hudWindow.setSize(w, h)
     // 言語変更等を HUD に即時反映
     hudWindow.webContents.send('settings-changed', s)
   }
