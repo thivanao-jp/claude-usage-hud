@@ -154,56 +154,77 @@ export class GitHubCopilotFetcher {
 
   /**
    * レスポンスから使用量データを解析する。
-   * フィールド名は未公開のため複数のパターンを試みる。
+   *
+   * 確認済み構造（copilot_internal/user）:
+   *   data.quota_snapshots.premium_interactions.{entitlement, remaining, percent_remaining}
+   *   data.quota_reset_date_utc
+   *   data.copilot_plan
+   *
+   * unlimited:true のクォータ（chat/completions 等）は無制限なので表示しない。
    */
   private parseResponse(data: Record<string, unknown>): CopilotUsageData | null {
+    const planType = String(data['copilot_plan'] ?? data['plan'] ?? 'unknown')
+    const resetDate = String(data['quota_reset_date_utc'] ?? data['quota_reset_date'] ?? '') || null
+
+    // quota_snapshots 形式（Business/Pro/Enterprise プラン）
+    const snapshots = data['quota_snapshots']
+    if (snapshots && typeof snapshots === 'object') {
+      const snaps = snapshots as Record<string, unknown>
+      // premium_interactions が最も重要なクォータ（プレミアムリクエスト数）
+      const keys = ['premium_interactions', 'chat', 'completions']
+      for (const key of keys) {
+        const snap = snaps[key]
+        if (!snap || typeof snap !== 'object') continue
+        const s = snap as Record<string, unknown>
+        if (s['unlimited'] === true) continue  // 無制限は表示不要
+        const entitlement = Number(s['entitlement'] ?? 0)
+        const remaining = Number(s['remaining'] ?? s['quota_remaining'] ?? 0)
+        if (entitlement > 0) {
+          const used = entitlement - remaining
+          return {
+            used: Math.max(0, used),
+            limit: entitlement,
+            utilization: Math.min(Math.max(0, (used / entitlement) * 100), 100),
+            resetDate,
+            planType,
+          }
+        }
+      }
+    }
+
+    // フラットフィールド形式（Free/Pro 個人プランで使われる可能性）
     const limit = Number(
-      data['monthly_included_requests'] ??
-      data['quota_monthly'] ??
-      data['monthly_quota'] ??
-      data['monthly_requests_limit'] ??
-      data['premium_requests_limit'] ??
-      0
+      data['monthly_included_requests'] ?? data['quota_monthly'] ??
+      data['monthly_quota'] ?? data['monthly_requests_limit'] ?? 0
     )
     const used = Number(
-      data['used_requests'] ??
-      data['quota_used'] ??
-      data['requests_used'] ??
-      data['monthly_requests_used'] ??
-      data['premium_requests_used'] ??
-      0
+      data['used_requests'] ?? data['quota_used'] ??
+      data['monthly_requests_used'] ?? data['premium_requests_used'] ?? 0
     )
     const remaining = Number(
-      data['remaining_requests'] ??
-      data['quota_remaining'] ??
-      data['premium_requests_remaining'] ??
-      0
+      data['remaining_requests'] ?? data['quota_remaining'] ??
+      data['premium_requests_remaining'] ?? 0
     )
-    const resetDate = (
-      String(data['quota_reset_at'] ?? data['reset_at'] ?? data['next_reset_at'] ?? data['billing_cycle_end'] ?? '')
-    ) || null
 
     if (limit > 0) {
       const actualUsed = used > 0 ? used : (limit - remaining)
       return {
-        used: actualUsed,
+        used: Math.max(0, actualUsed),
         limit,
-        utilization: Math.min((actualUsed / limit) * 100, 100),
+        utilization: Math.min(Math.max(0, (actualUsed / limit) * 100), 100),
         resetDate,
-        planType: String(data['copilot_plan'] ?? data['plan'] ?? 'unknown'),
+        planType,
       }
     }
-
-    // limit が取れなくても used + remaining があれば計算
     if (remaining > 0 || used > 0) {
       const total = used + remaining
       if (total > 0) {
         return {
           used,
           limit: total,
-          utilization: Math.min((used / total) * 100, 100),
+          utilization: Math.min(Math.max(0, (used / total) * 100), 100),
           resetDate,
-          planType: String(data['copilot_plan'] ?? 'unknown'),
+          planType,
         }
       }
     }

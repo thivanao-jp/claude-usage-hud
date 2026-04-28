@@ -607,6 +607,14 @@ if (!gotTheLock) {
     app.dock?.hide()
 
     claudeWebFetcher.setLogCallback(log)
+    copilotFetcher.setLogCallback(log)
+    codexFetcher.setLogCallback(log)
+    copilotFetcher.setStatusChangeCallback((status) => {
+      log('copilot login status changed:', status)
+    })
+    codexFetcher.setStatusChangeCallback((status) => {
+      log('codex login status changed:', status)
+    })
 
     // 起動時にキャッシュ済み orgUuid を復元
     const initialSettings = loadSettings()
