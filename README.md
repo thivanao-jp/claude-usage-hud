@@ -18,6 +18,7 @@ Always-on-top floating window showing usage bars at a glance.
 - **OA** — 7-day OAuth Apps window (Claude Code, Cursor, Windsurf, etc.)
 - **Opus** — 7-day Opus window
 - **EX** — Extra usage (monthly add-on credits, when enabled)
+- **β** — Beta provider bars (GitHub Copilot, OpenAI Codex — when enabled)
 
 ### Detail View
 Expanded view with full usage cards, reset times, and a usage history chart.
@@ -31,6 +32,16 @@ Live usage percentages always visible in the macOS menu bar or Windows system tr
 
 ### Alerts
 OS notifications when any usage window exceeds a configurable threshold.
+
+### β Providers (experimental)
+Optional support for usage data from other AI services:
+
+- **GitHub Copilot** — Monthly premium request usage, fetched via `gh auth token` (GitHub CLI must be installed and authenticated)
+- **OpenAI Codex Cloud** — Monthly usage, fetched via a hidden browser window maintaining your chatgpt.com session
+
+Enable each provider individually in **Settings → β Providers**. When data is unavailable (not logged in, API changed, etc.), the card shows "Data unavailable" without affecting the rest of the app.
+
+> These providers use unofficial or undocumented endpoints and may break without notice.
 
 ### Multilingual
 English and Japanese, with automatic OS language detection.
@@ -52,7 +63,7 @@ English and Japanese, with automatic OS language detection.
    - `arm64.dmg` — Apple Silicon (M1/M2/M3/M4)
    - `.dmg` (no suffix) — Intel Mac
 2. Open the `.dmg` and drag **Claude Usage HUD** to Applications
-3. **First launch**: right-click the app → **Open** (required once to bypass Gatekeeper for unsigned builds)
+3. Launch normally — the app is notarized and Gatekeeper-approved
 
 ### Windows
 
@@ -83,6 +94,7 @@ English and Japanese, with automatic OS language detection.
 | **Update Interval** | 1 / 5 / 10 / 30 minutes |
 | **Floating Window** | Always on top, opacity |
 | **Alerts** | Notification threshold (%) per usage window |
+| **β Providers** | Enable GitHub Copilot and/or OpenAI Codex usage tracking |
 
 ---
 
