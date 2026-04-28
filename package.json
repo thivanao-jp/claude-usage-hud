@@ -1,6 +1,6 @@
 {
   "name": "claude-usage-hud",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "description": "Claude usage monitor HUD - menubar + floating window",
   "main": "out/main/main.js",
   "scripts": {
