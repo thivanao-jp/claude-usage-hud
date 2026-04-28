@@ -41,6 +41,10 @@ export interface Settings {
     workDayEnd: number     // 0-23
     excludeWeekends: boolean
   }
+  betaProviders?: {
+    copilot?: { enabled: boolean }
+    codex?: { enabled: boolean }
+  }
 }
 
 const defaultSettings: Settings = {

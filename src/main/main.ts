@@ -15,11 +15,13 @@ import { createServer as createHttpServer, IncomingMessage, ServerResponse } fro
 import { is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
 import { loadSettings, saveSettings, Settings, ViewMode } from './settings'
-import { UsageData, ProfileData, UsageEntry } from './claudeApi'
+import { UsageData, ProfileData, UsageEntry, BetaProvidersData } from './claudeApi'
 import { WEEKLY_FIELD_DEFS } from './fieldDefs'
 import { saveUsageHistory, getUsageHistory } from './db'
 import { getTokenFromCredentials } from './credentials'
 import { ClaudeWebFetcher } from './claudeWebFetcher'
+import { GitHubCopilotFetcher } from './githubCopilotFetcher'
+import { CodexFetcher } from './codexFetcher'
 import { createBarIcon } from './trayIcon'
 
 // stdoutがバッファリングされることがあるため、ログは直接ファイルに書き込む
@@ -42,10 +44,13 @@ let updateCheckTimer: ReturnType<typeof setInterval> | null = null
 let updateDownloaded = false
 
 const claudeWebFetcher = new ClaudeWebFetcher()
+const copilotFetcher = new GitHubCopilotFetcher()
+const codexFetcher = new CodexFetcher()
 
 let lastUsage: UsageData | null = null
 let lastProfile: ProfileData | null = null
 let lastSuccessAt: Date | null = null
+let lastBeta: BetaProvidersData = { copilot: null, codex: null }
 
 // ---- Display Helper ----
 
@@ -321,6 +326,7 @@ function sendToHud(isStale: boolean): void {
     profile: lastProfile,
     lastSuccessAt: lastSuccessAt?.toISOString() ?? null,
     isStale,
+    beta: lastBeta,
   })
 }
 
@@ -354,6 +360,33 @@ async function doUpdate(): Promise<void> {
   }
 }
 
+async function doUpdateBeta(): Promise<void> {
+  const settings = loadSettings()
+  const bp = settings.betaProviders ?? {}
+  const results: BetaProvidersData = { copilot: null, codex: null }
+
+  if (bp.copilot?.enabled) {
+    try {
+      results.copilot = await copilotFetcher.fetchData()
+      log('doUpdateBeta: copilot=', results.copilot)
+    } catch (e) {
+      log('doUpdateBeta: copilot error:', e)
+    }
+  }
+
+  if (bp.codex?.enabled) {
+    try {
+      results.codex = await codexFetcher.fetchData()
+      log('doUpdateBeta: codex=', results.codex)
+    } catch (e) {
+      log('doUpdateBeta: codex error:', e)
+    }
+  }
+
+  lastBeta = results
+  sendToHud(lastUsage == null)
+}
+
 function scheduleUpdates(): void {
   if (updateTimer) clearInterval(updateTimer)
 
@@ -362,7 +395,9 @@ function scheduleUpdates(): void {
 
   // 起動直後の即時呼び出しは429になりやすいので3秒後に初回実行
   setTimeout(doUpdate, 3000)
-  updateTimer = setInterval(doUpdate, intervalMs)
+  // Beta providers は Claude より少し遅らせて起動直後の負荷を分散
+  setTimeout(doUpdateBeta, 8000)
+  updateTimer = setInterval(() => { doUpdate(); doUpdateBeta() }, intervalMs)
 }
 
 // ---- Alerts ----
@@ -434,6 +469,14 @@ ipcMain.handle('get-login-status', () => claudeWebFetcher.getLoginStatus())
 ipcMain.handle('get-app-version', () => app.getVersion())
 ipcMain.handle('check-for-updates', () => autoUpdater.checkForUpdates().catch(e => log('update check error:', e)))
 ipcMain.handle('install-update', () => autoUpdater.quitAndInstall())
+// Beta providers
+ipcMain.handle('get-beta-data', () => lastBeta)
+ipcMain.handle('get-copilot-login-status', () => copilotFetcher.getLoginStatus())
+ipcMain.handle('get-codex-login-status', () => codexFetcher.getLoginStatus())
+ipcMain.handle('show-copilot-login-window', () => copilotFetcher.showLoginWindow())
+ipcMain.handle('hide-copilot-login-window', () => copilotFetcher.hideLoginWindow())
+ipcMain.handle('show-codex-login-window', () => codexFetcher.showLoginWindow())
+ipcMain.handle('hide-codex-login-window', () => codexFetcher.hideLoginWindow())
 
 // ---- App Lifecycle ----
 
@@ -601,6 +644,8 @@ if (!gotTheLock) {
 
   app.on('before-quit', () => {
     claudeWebFetcher.destroy()
+    copilotFetcher.destroy()
+    codexFetcher.destroy()
   })
 
   app.on('window-all-closed', (e) => { e.preventDefault() })

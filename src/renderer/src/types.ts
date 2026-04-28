@@ -75,6 +75,33 @@ export interface Settings {
     workDayEnd: number
     excludeWeekends: boolean
   }
+  betaProviders?: {
+    copilot?: { enabled: boolean }
+    codex?: { enabled: boolean }
+  }
+}
+
+// ---- Beta Providers ----
+
+export interface CopilotUsageData {
+  used: number
+  limit: number
+  utilization: number
+  resetDate: string | null
+  planType: string
+}
+
+export interface CodexUsageData {
+  used: number
+  limit: number
+  utilization: number
+  resetDate: string | null
+  unit: string
+}
+
+export interface BetaProvidersData {
+  copilot: CopilotUsageData | null
+  codex: CodexUsageData | null
 }
 
 export interface HistoryRow {
@@ -120,6 +147,14 @@ declare global {
       checkForUpdates: () => Promise<void>
       installUpdate: () => Promise<void>
       onUpdateStatus: (cb: (status: UpdateStatus) => void) => () => void
+      // Beta providers
+      getBetaData: () => Promise<BetaProvidersData>
+      getCopilotLoginStatus: () => Promise<'logged-in' | 'logged-out' | 'unknown'>
+      getCodexLoginStatus: () => Promise<'logged-in' | 'logged-out' | 'unknown'>
+      showCopilotLoginWindow: () => Promise<void>
+      hideCopilotLoginWindow: () => Promise<void>
+      showCodexLoginWindow: () => Promise<void>
+      hideCodexLoginWindow: () => Promise<void>
     }
   }
 }

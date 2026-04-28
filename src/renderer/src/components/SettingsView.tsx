@@ -5,6 +5,8 @@ import { useLang } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
 
+type ProviderStatus = 'logged-in' | 'logged-out' | 'unknown'
+
 const defaultSettings: Settings = {
   token: '',
   launchAtLogin: false,
@@ -45,12 +47,16 @@ export function SettingsView({ onSettingsChange }: Props) {
   const [currentUsage, setCurrentUsage] = useState<UsageData | null>(null)
   const [appVersion, setAppVersion] = useState('')
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
+  const [copilotStatus, setCopilotStatus] = useState<ProviderStatus>('unknown')
+  const [codexStatus, setCodexStatus] = useState<ProviderStatus>('unknown')
 
   useEffect(() => {
     window.api.getSettings().then(setS)
     window.api.getLoginStatus().then(setLoginStatus)
     window.api.getUsage().then(r => setCurrentUsage(r.usage))
     window.api.getAppVersion().then(setAppVersion)
+    window.api.getCopilotLoginStatus().then(setCopilotStatus)
+    window.api.getCodexLoginStatus().then(setCodexStatus)
     const offLogin = window.api.onLoginStatusChanged(status => setLoginStatus(status))
     const offUpdate = window.api.onUpdateStatus(status => setUpdateStatus(status as UpdateStatus))
     return () => { offLogin(); offUpdate() }
@@ -353,11 +359,67 @@ export function SettingsView({ onSettingsChange }: Props) {
         )}
       </Section>
 
+      {/* Beta Providers */}
+      <Section title={t('sectionBeta')} th={th}>
+        <div style={{ fontSize: 11, color: th.textFaint2, marginBottom: 10 }}>{t('betaHint')}</div>
+
+        {/* GitHub Copilot */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <CheckRow
+              label={t('betaCopilotLabel')}
+              checked={s.betaProviders?.copilot?.enabled ?? false}
+              onChange={v => upd(p => ({ ...p, betaProviders: { ...p.betaProviders, copilot: { enabled: v } } }))}
+              th={th}
+            />
+            <StatusDot status={copilotStatus} t={t} />
+            <button
+              onClick={() => window.api.showCopilotLoginWindow()}
+              style={{ ...secondaryBtn, marginLeft: 'auto', fontSize: 11 }}
+            >
+              {t('betaLoginBtn')}
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: th.textFaint2, paddingLeft: 20 }}>{t('betaCopilotDesc')}</div>
+        </div>
+
+        {/* OpenAI Codex */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <CheckRow
+              label={t('betaCodexLabel')}
+              checked={s.betaProviders?.codex?.enabled ?? false}
+              onChange={v => upd(p => ({ ...p, betaProviders: { ...p.betaProviders, codex: { enabled: v } } }))}
+              th={th}
+            />
+            <StatusDot status={codexStatus} t={t} />
+            <button
+              onClick={() => window.api.showCodexLoginWindow()}
+              style={{ ...secondaryBtn, marginLeft: 'auto', fontSize: 11 }}
+            >
+              {t('betaLoginBtn')}
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: th.textFaint2, paddingLeft: 20 }}>{t('betaCodexDesc')}</div>
+        </div>
+      </Section>
+
       {/* Save */}
       <button onClick={handleSave} style={primaryBtn}>
         {saved ? t('savedConfirm') : t('saveSettings')}
       </button>
     </div>
+  )
+}
+
+function StatusDot({ status, t }: { status: ProviderStatus; t: ReturnType<typeof useT> }) {
+  const color = status === 'logged-in' ? '#4caf50' : status === 'logged-out' ? '#f44336' : '#888'
+  const label = status === 'logged-in' ? t('betaLoggedIn') : status === 'logged-out' ? t('betaNotLoggedIn') : t('betaStatusUnknown')
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
+      <span style={{ color: '#888' }}>{label}</span>
+    </span>
   )
 }
 
