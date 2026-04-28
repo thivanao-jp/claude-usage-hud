@@ -193,6 +193,44 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
           )
         })}
 
+        {/* Extra usage bar */}
+        {showExtraBar && (() => {
+          const extra: ExtraUsage | null = usage?.extra_usage ?? null
+          const pct = extra ? Math.min(Math.round(extra.utilization), 100) : 0
+          const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : '#a78bfa'
+          const creditsText = extra
+            ? `${extra.used_credits.toLocaleString()}/${extra.monthly_limit.toLocaleString()}cr`
+            : '—'
+
+          return (
+            <div
+              style={{
+                position: 'relative',
+                height: 34,
+                borderRadius: 4,
+                overflow: 'hidden',
+                marginBottom: 4,
+                background: th.bgBar,
+                WebkitAppRegion: 'drag' as any,
+              }}
+            >
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                width: `${pct}%`,
+                background: barColor,
+                borderRadius: 4,
+                transition: 'width 0.4s ease',
+              }} />
+              <div style={barTextStyle}>
+                <span style={{ width: 30, flexShrink: 0 }}>EX</span>
+                <span style={{ flex: 1 }}>{creditsText}</span>
+                <span>{pct}%</span>
+              </div>
+            </div>
+          )
+        })()}
+
         {/* Beta provider bars */}
         {settings.betaProviders?.copilot?.enabled && (() => {
           const d = beta?.copilot ?? null
@@ -253,43 +291,6 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
           )
         })()}
 
-        {/* Extra usage bar */}
-        {showExtraBar && (() => {
-          const extra: ExtraUsage | null = usage?.extra_usage ?? null
-          const pct = extra ? Math.min(Math.round(extra.utilization), 100) : 0
-          const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : '#a78bfa'
-          const creditsText = extra
-            ? `${extra.used_credits.toLocaleString()}/${extra.monthly_limit.toLocaleString()}cr`
-            : '—'
-
-          return (
-            <div
-              style={{
-                position: 'relative',
-                height: 34,
-                borderRadius: 4,
-                overflow: 'hidden',
-                marginBottom: 4,
-                background: th.bgBar,
-                WebkitAppRegion: 'drag' as any,
-              }}
-            >
-              <div style={{
-                position: 'absolute',
-                inset: 0,
-                width: `${pct}%`,
-                background: barColor,
-                borderRadius: 4,
-                transition: 'width 0.4s ease',
-              }} />
-              <div style={barTextStyle}>
-                <span style={{ width: 30, flexShrink: 0 }}>EX</span>
-                <span style={{ flex: 1 }}>{creditsText}</span>
-                <span>{pct}%</span>
-              </div>
-            </div>
-          )
-        })()}
       </div>
     </div>
   )
