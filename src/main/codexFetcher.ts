@@ -90,30 +90,53 @@ export class CodexFetcher {
 
     let raw: RawResult | null = null
 
+    const currentUrl = win.webContents.getURL()
+    this.log('codex: current page URL:', currentUrl)
+
     try {
       raw = await win.webContents.executeJavaScript(`
         (async () => {
           try {
-            // ログイン確認
+            // ログイン確認: /backend-api/me が実ユーザーデータを返すか確認
             const meRes = await fetch('/backend-api/me', { credentials: 'include' })
             if (!meRes.ok) return { error: 'not-logged-in:' + meRes.status }
+            const meData = await meRes.json()
+            // email または id がない場合はゲスト/未ログイン
+            const userId = meData?.email || meData?.id || meData?.user_id || ''
+            if (!userId) return { error: 'not-logged-in:guest' }
+
+            // NextAuth セッションからアクセストークンを取得
+            let accessToken = ''
+            try {
+              const sessionRes = await fetch('/api/auth/session', { credentials: 'include' })
+              if (sessionRes.ok) {
+                const session = await sessionRes.json()
+                accessToken = session?.accessToken || session?.user?.accessToken || ''
+              }
+            } catch {}
+
+            const authHeaders = accessToken
+              ? { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' }
+              : { 'Content-Type': 'application/json' }
 
             // Codex 使用量エンドポイントを試行（内部 API、仕様未公開）
             const candidates = [
-              '/backend-api/codex/cloud/usage',
               '/backend-api/codex/usage',
+              '/backend-api/codex/cloud/usage',
               '/api/v1/codex/cloud/usage',
               '/api/codex/usage',
               '/backend-api/limits',
             ]
+            const statuses = {}
             for (const ep of candidates) {
-              const r = await fetch(ep, { credentials: 'include' })
+              const r = await fetch(ep, { credentials: 'include', headers: authHeaders })
+              statuses[ep] = r.status
               if (r.ok) {
                 const d = await r.json()
                 return { endpoint: ep, data: d }
               }
             }
-            return { error: 'no-endpoint' }
+            return { error: 'no-endpoint', me: userId, token: !!accessToken, statuses }
           } catch (e) {
             return { error: String(e) }
           }
@@ -128,6 +151,8 @@ export class CodexFetcher {
     if (!raw || 'error' in raw) {
       const err = (raw as { error: string } | null)?.error ?? ''
       if (err.includes('not-logged-in')) this.setStatus('logged-out')
+      // no-endpoint = ログイン済みだがエンドポイント未発見
+      if (err === 'no-endpoint' || err.startsWith('no-endpoint')) this.setStatus('logged-in')
       return null
     }
 
@@ -139,46 +164,48 @@ export class CodexFetcher {
 
   /**
    * レスポンスから使用量データを解析する。
-   * フィールド名は未公開のため複数のパターンを試みる。
+   *
+   * 確認済み構造（/backend-api/codex/usage）:
+   *   rate_limit.secondary_window.{used_percent, reset_at, limit_window_seconds}
+   *   rate_limit.primary_window.{used_percent, reset_at} (5時間ローリング)
+   *   plan_type
    */
   private parseResponse(data: unknown): CodexUsageData | null {
     if (!data || typeof data !== 'object') return null
     const d = data as Record<string, unknown>
 
-    // ネストされた codex キーがある場合は展開
+    // rate_limit 形式（確認済み: /backend-api/codex/usage）
+    const rateLimit = d['rate_limit']
+    if (rateLimit && typeof rateLimit === 'object') {
+      const rl = rateLimit as Record<string, unknown>
+      // secondary_window = 週次（7日間, 604800s）を優先して表示
+      const win = (rl['secondary_window'] ?? rl['primary_window']) as Record<string, unknown> | undefined
+      if (win && typeof win === 'object') {
+        const usedPct = Number(win['used_percent'] ?? 0)
+        const resetAt = Number(win['reset_at'] ?? 0)
+        const windowSec = Number(win['limit_window_seconds'] ?? 0)
+        const resetDate = resetAt > 0 ? new Date(resetAt * 1000).toISOString() : null
+        const label = windowSec >= 604800 ? '7d' : windowSec >= 18000 ? '5h' : 'requests'
+        return {
+          used: Math.round(usedPct),
+          limit: 100,
+          utilization: Math.min(usedPct, 100),
+          resetDate,
+          unit: label,
+        }
+      }
+    }
+
+    // フラットフィールド形式（将来の構造変更に備えたフォールバック）
     const src = (d['codex'] && typeof d['codex'] === 'object')
       ? d['codex'] as Record<string, unknown>
       : d
-
-    const used = Number(
-      src['used'] ??
-      src['usage'] ??
-      src['tasks_used'] ??
-      src['requests_used'] ??
-      src['conversations_used'] ??
-      0
-    )
-    const limit = Number(
-      src['limit'] ??
-      src['quota'] ??
-      src['monthly_limit'] ??
-      src['tasks_limit'] ??
-      src['requests_limit'] ??
-      0
-    )
-    const resetDate = (
-      String(src['reset_at'] ?? src['resets_at'] ?? src['period_end'] ?? src['next_reset'] ?? '')
-    ) || null
-    const unit = String(src['unit'] ?? src['resource_type'] ?? 'tasks')
-
+    const used = Number(src['used'] ?? src['usage'] ?? src['used_percent'] ?? 0)
+    const limit = Number(src['limit'] ?? src['quota'] ?? src['monthly_limit'] ?? 0)
+    const resetDate = String(src['reset_at'] ?? src['resets_at'] ?? '') || null
+    const unit = String(src['unit'] ?? src['resource_type'] ?? '%')
     if (limit > 0) {
-      return {
-        used,
-        limit,
-        utilization: Math.min((used / limit) * 100, 100),
-        resetDate,
-        unit,
-      }
+      return { used, limit, utilization: Math.min((used / limit) * 100, 100), resetDate, unit }
     }
     return null
   }
