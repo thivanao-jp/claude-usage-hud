@@ -172,12 +172,30 @@ export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, o
             />
           )}
           {settings.betaProviders?.codex?.enabled && (
-            <BetaUsageCard
-              label="OpenAI Codex"
-              data={beta.codex}
-              color="#10a37f"
-              unit={beta.codex?.unit ?? 'tasks'}
-            />
+            <>
+              {beta.codex?.fiveHourUtilization != null && (
+                <BetaUsageCard
+                  label="OpenAI Codex (5h)"
+                  data={{
+                    used: Math.round(beta.codex.fiveHourUtilization),
+                    limit: 100,
+                    utilization: beta.codex.fiveHourUtilization,
+                    resetDate: beta.codex.fiveHourResetDate,
+                    unit: '5h',
+                    fiveHourUtilization: null,
+                    fiveHourResetDate: null,
+                  }}
+                  color="#10a37f"
+                  unit="5h"
+                />
+              )}
+              <BetaUsageCard
+                label={beta.codex?.fiveHourUtilization != null ? 'OpenAI Codex (7d)' : 'OpenAI Codex'}
+                data={beta.codex}
+                color="#10a37f"
+                unit={beta.codex?.unit ?? '%'}
+              />
+            </>
           )}
         </div>
       )}

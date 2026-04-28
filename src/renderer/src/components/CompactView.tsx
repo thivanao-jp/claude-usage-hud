@@ -217,23 +217,39 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
         })()}
         {settings.betaProviders?.codex?.enabled && (() => {
           const d = beta?.codex ?? null
-          const pct = d ? Math.min(Math.round(d.utilization), 100) : 0
-          const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : '#10a37f'
-          const { date, time, rel } = formatReset(d?.resetDate ?? null, t('timeNow'))
-          return (
+          // 5h primary window
+          const pct5 = d?.fiveHourUtilization != null ? Math.min(Math.round(d.fiveHourUtilization), 100) : 0
+          const color5 = pct5 >= 90 ? '#e05a2b' : pct5 >= 70 ? '#e0a12b' : '#10a37f'
+          const reset5 = formatReset(d?.fiveHourResetDate ?? null, t('timeNow'))
+          // 7d secondary window
+          const pct7 = d ? Math.min(Math.round(d.utilization), 100) : 0
+          const color7 = pct7 >= 90 ? '#e05a2b' : pct7 >= 70 ? '#e0a12b' : '#10a37f'
+          const reset7 = formatReset(d?.resetDate ?? null, t('timeNow'))
+
+          const BetaBar = ({ label, pct, barColor, reset, hasData }: {
+            label: string; pct: number; barColor: string
+            reset: ReturnType<typeof formatReset>; hasData: boolean
+          }) => (
             <div style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
               <div style={{ position: 'relative', height: 34, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
                 <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
                 <div style={barTextStyle}>
-                  <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>Cdx β</span>
-                  <span style={{ width: 72, flexShrink: 0 }}>{d ? date : '—'}</span>
-                  <span style={{ width: 44, flexShrink: 0 }}>{d ? time : ''}</span>
-                  <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{d ? rel.major : ''}</span>
-                  <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{d ? rel.minor : ''}</span>
-                  <span style={{ flex: 1, textAlign: 'right' }}>{d ? `${pct}%` : '—'}</span>
+                  <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>{label}</span>
+                  <span style={{ width: 72, flexShrink: 0 }}>{hasData ? reset.date : '—'}</span>
+                  <span style={{ width: 44, flexShrink: 0 }}>{hasData ? reset.time : ''}</span>
+                  <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{hasData ? reset.rel.major : ''}</span>
+                  <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{hasData ? reset.rel.minor : ''}</span>
+                  <span style={{ flex: 1, textAlign: 'right' }}>{hasData ? `${pct}%` : '—'}</span>
                 </div>
               </div>
             </div>
+          )
+
+          return (
+            <>
+              <BetaBar label="Cdx5β" pct={pct5} barColor={color5} reset={reset5} hasData={d?.fiveHourUtilization != null} />
+              <BetaBar label="Cdx7β" pct={pct7} barColor={color7} reset={reset7} hasData={d != null} />
+            </>
           )
         })()}
 

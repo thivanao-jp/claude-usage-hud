@@ -178,20 +178,31 @@ export class CodexFetcher {
     const rateLimit = d['rate_limit']
     if (rateLimit && typeof rateLimit === 'object') {
       const rl = rateLimit as Record<string, unknown>
-      // secondary_window = 週次（7日間, 604800s）を優先して表示
-      const win = (rl['secondary_window'] ?? rl['primary_window']) as Record<string, unknown> | undefined
-      if (win && typeof win === 'object') {
+
+      const parseWindow = (w: unknown): { utilization: number; resetDate: string | null } | null => {
+        if (!w || typeof w !== 'object') return null
+        const win = w as Record<string, unknown>
         const usedPct = Number(win['used_percent'] ?? 0)
         const resetAt = Number(win['reset_at'] ?? 0)
-        const windowSec = Number(win['limit_window_seconds'] ?? 0)
-        const resetDate = resetAt > 0 ? new Date(resetAt * 1000).toISOString() : null
-        const label = windowSec >= 604800 ? '7d' : windowSec >= 18000 ? '5h' : 'requests'
         return {
-          used: Math.round(usedPct),
-          limit: 100,
           utilization: Math.min(usedPct, 100),
-          resetDate,
-          unit: label,
+          resetDate: resetAt > 0 ? new Date(resetAt * 1000).toISOString() : null,
+        }
+      }
+
+      const secondary = parseWindow(rl['secondary_window'])  // 7d
+      const primary   = parseWindow(rl['primary_window'])    // 5h
+
+      const base = secondary ?? primary
+      if (base) {
+        return {
+          used: Math.round(base.utilization),
+          limit: 100,
+          utilization: base.utilization,
+          resetDate: base.resetDate,
+          unit: secondary ? '7d' : '5h',
+          fiveHourUtilization: primary?.utilization ?? null,
+          fiveHourResetDate:   primary?.resetDate   ?? null,
         }
       }
     }
@@ -205,7 +216,10 @@ export class CodexFetcher {
     const resetDate = String(src['reset_at'] ?? src['resets_at'] ?? '') || null
     const unit = String(src['unit'] ?? src['resource_type'] ?? '%')
     if (limit > 0) {
-      return { used, limit, utilization: Math.min((used / limit) * 100, 100), resetDate, unit }
+      return {
+        used, limit, utilization: Math.min((used / limit) * 100, 100), resetDate, unit,
+        fiveHourUtilization: null, fiveHourResetDate: null,
+      }
     }
     return null
   }

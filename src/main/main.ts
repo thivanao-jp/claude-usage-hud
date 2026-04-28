@@ -92,14 +92,16 @@ function getCompactHeight(settings: Settings): number {
     ...WEEKLY_FIELD_DEFS.map(f => showFields[f.key] ?? false),
     settings.tray.showExtra,
     bp.copilot?.enabled ?? false,
-    bp.codex?.enabled ?? false,
+    bp.codex?.enabled ?? false,  // 5h bar
+    bp.codex?.enabled ?? false,  // 7d bar (Codex is always 2 bars)
   ].filter(Boolean).length || 1
   return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD
 }
 
 function getDetailHeight(settings: Settings): number {
   const bp = settings.betaProviders ?? {}
-  const betaCount = [bp.copilot?.enabled, bp.codex?.enabled].filter(Boolean).length
+  // Codex は 5h + 7d で2枚になるためカウント2
+  const betaCount = (bp.copilot?.enabled ? 1 : 0) + (bp.codex?.enabled ? 2 : 0)
   return DETAIL_H_BASE + betaCount * DETAIL_BETA_H
 }
 

@@ -94,9 +94,11 @@ export interface CopilotUsageData {
 export interface CodexUsageData {
   used: number
   limit: number
-  utilization: number
+  utilization: number      // 7d secondary window
   resetDate: string | null
   unit: string
+  fiveHourUtilization: number | null      // 5h primary window
+  fiveHourResetDate: string | null
 }
 
 export interface BetaProvidersData {
