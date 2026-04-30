@@ -455,7 +455,10 @@ ipcMain.handle('get-history', (_e, days: number) => getUsageHistory(days))
 ipcMain.handle('get-settings', () => loadSettings())
 ipcMain.handle('save-settings', (_e, settings: Settings) => {
   saveSettings(settings)
-  app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin ?? false })
+  app.setLoginItemSettings({
+    openAtLogin: settings.launchAtLogin ?? false,
+    ...(process.platform === 'win32' ? { path: process.execPath } : {})
+  })
   scheduleUpdates()
   if (hudWindow && !hudWindow.isDestroyed()) {
     const s = loadSettings()
@@ -630,7 +633,8 @@ if (!gotTheLock) {
     const initialSettings = loadSettings()
 
     // システム側の launch-at-login 状態を設定ファイルに同期
-    const systemLaunchAtLogin = app.getLoginItemSettings().openAtLogin
+    const loginItemOpts = process.platform === 'win32' ? { path: process.execPath } : {}
+    const systemLaunchAtLogin = app.getLoginItemSettings(loginItemOpts).openAtLogin
     if (systemLaunchAtLogin !== (initialSettings.launchAtLogin ?? false)) {
       initialSettings.launchAtLogin = systemLaunchAtLogin
       saveSettings(initialSettings)
@@ -655,6 +659,8 @@ if (!gotTheLock) {
     })
 
     createTray()
+    hudWindow = createHudWindow()
+    hudWindow.show()
     scheduleUpdates()
     startLocalApiServer()
     setupAutoUpdater()

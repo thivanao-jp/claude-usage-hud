@@ -5,25 +5,26 @@ export interface CodexUsageData {
   limit: number
   utilization: number  // 0-100
   resetDate: string | null
-  unit: string  // 'tasks' | 'requests' など
+  unit: string
+  fiveHourUtilization: number | null
+  fiveHourResetDate: string | null
 }
 
 export type CodexLoginStatus = 'logged-in' | 'logged-out' | 'unknown'
 
 /**
- * [β] OpenAI Codex Cloud の月間リミット使用量を取得する。
+ * [β] OpenAI Codex Cloud の使用量を取得する。
  *
- * 隠し BrowserWindow で chatgpt.com セッションを維持し、
- * 内部 API エンドポイント（非公式）を呼び出す。
- *
- * NOTE: Codex の内部 API は未公開のため、エンドポイントが変わった場合は
- *       null を返して graceful degradation する。
+ * chatgpt.com/codex/cloud/settings/analytics をコンテキストとして使用し、
+ * /backend-api/codex/usage を呼び出す。
+ * analytics ページに遷移することでセッションが有効になり、401 を回避できる。
  */
 export class CodexFetcher {
   private win: BrowserWindow | null = null
   private loginStatus: CodexLoginStatus = 'unknown'
   private logCallback: ((...args: unknown[]) => void) | null = null
   private statusChangeCallback: ((status: CodexLoginStatus) => void) | null = null
+  private analyticsLoaded = false
 
   setLogCallback(cb: (...args: unknown[]) => void): void { this.logCallback = cb }
   setStatusChangeCallback(cb: (status: CodexLoginStatus) => void): void { this.statusChangeCallback = cb }
@@ -51,10 +52,12 @@ export class CodexFetcher {
       }
     })
     win.webContents.setUserAgent(
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+      process.platform === 'win32'
+        ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+        : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
     )
     win.on('close', (e) => { e.preventDefault(); win.hide() })
-    win.on('closed', () => { this.win = null })
+    win.on('closed', () => { this.win = null; this.analyticsLoaded = false })
     return win
   }
 
@@ -63,86 +66,168 @@ export class CodexFetcher {
     return this.win
   }
 
-  private async loadChatGPT(): Promise<void> {
+  /** analytics ページへ遷移し、実際のリクエストヘッダーを使って wham/usage を取得する */
+  private async fetchViaPageIntercept(): Promise<CodexUsageData | null> {
     const win = this.ensureWindow()
-    const current = win.webContents.getURL()
-    if (current.includes('chatgpt.com') || current.includes('chat.openai.com')) return
+    const session = win.webContents.session
 
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Load timeout')), 20000)
-      win.webContents.once('did-finish-load', () => { clearTimeout(timer); resolve() })
-      win.loadURL('https://chatgpt.com').catch(reject)
+    // wham/usage リクエストのヘッダーと URL を記録する
+    let capturedWhamHeaders: Record<string, string> | null = null
+    let capturedWhamUrl: string | null = null
+
+    const headerHandler = (
+      details: Electron.OnBeforeSendHeadersListenerDetails,
+      callback: (response: Electron.CallbackResponse) => void
+    ) => {
+      if (details.url.includes('wham/usage') && !details.url.includes('breakdown') && !details.url.includes('daily')) {
+        capturedWhamHeaders = details.requestHeaders as Record<string, string>
+        capturedWhamUrl = details.url
+        this.log('codex: captured wham/usage headers:', Object.keys(capturedWhamHeaders))
+      }
+      callback({ requestHeaders: details.requestHeaders })
+    }
+
+    session.webRequest.onBeforeSendHeaders(
+      { urls: ['https://chatgpt.com/backend-api/wham/*'] },
+      headerHandler
+    )
+
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 15000)
+      win.webContents.once('did-finish-load', () => {
+        clearTimeout(timer)
+        setTimeout(resolve, 3000)
+      })
+      win.loadURL('https://chatgpt.com/codex/cloud/settings/analytics').catch(() => resolve())
     })
+
+    session.webRequest.onBeforeSendHeaders(null as unknown as Electron.OnBeforeSendHeadersListener)
+
+    if (!capturedWhamHeaders || !capturedWhamUrl) {
+      this.log('codex: wham/usage not captured')
+      return null
+    }
+
+    // session.fetch() でセッションの Cookie を引き継いでリクエスト
+    // capturedWhamHeaders から Authorization 等の重要ヘッダーを転送する
+    try {
+      // 認証に必要なヘッダーのみ転送（Sec-* 等は除外）
+      const essential = ['Authorization', 'OAI-Device-Id', 'OAI-Session-Id',
+        'ChatGPT-Account-ID', 'OAI-Language', 'OAI-Client-Version',
+        'OAI-Client-Build-Number', 'X-OpenAI-Target-Route', 'X-OpenAI-Target-Path', 'X-OAI-IS']
+      const headers: Record<string, string> = {}
+      for (const key of essential) {
+        const val = capturedWhamHeaders![key] ?? capturedWhamHeaders![key.toLowerCase()]
+        if (val) headers[key] = Array.isArray(val) ? val[0] : String(val)
+      }
+      this.log('codex: using session.fetch, auth?', !!headers['Authorization'])
+      const resp = await session.fetch(capturedWhamUrl!, { method: 'GET', headers })
+      this.log('codex: wham/usage session.fetch status:', resp.status)
+      const data = resp.ok ? await resp.json() : null
+
+      this.log('codex: wham/usage data:', JSON.stringify(data)?.slice(0, 400))
+      const parsed = this.parseWhamUsage(data)
+      if (parsed) {
+        this.setStatus('logged-in')
+        return parsed
+      }
+    } catch (e) {
+      this.log('codex: wham session.fetch error:', e)
+    }
+
+    return null
+  }
+
+  /** /backend-api/wham/usage のレスポンスを解析する */
+  private parseWhamUsage(data: unknown): CodexUsageData | null {
+    if (!data || typeof data !== 'object') return null
+    const d = data as Record<string, unknown>
+
+    // wham/usage 形式: { rate_limits: { five_hour: { used_percent, reset_at }, seven_day: {...} } }
+    const rateLimits = d['rate_limits'] ?? d['rate_limit']
+    if (rateLimits && typeof rateLimits === 'object') {
+      const rl = rateLimits as Record<string, unknown>
+      const parseWin = (w: unknown) => {
+        if (!w || typeof w !== 'object') return null
+        const win = w as Record<string, unknown>
+        const used = Number(win['used_percent'] ?? win['utilization'] ?? 0)
+        const resetAt = win['reset_at'] ? Number(win['reset_at']) : 0
+        return {
+          utilization: Math.min(used, 100),
+          resetDate: resetAt > 0 ? new Date(resetAt * 1000).toISOString() : null,
+        }
+      }
+      // wham では five_hour / seven_day キーを使う場合がある
+      const fiveHour = parseWin(rl['five_hour'] ?? rl['primary_window'] ?? rl['5h'])
+      const sevenDay = parseWin(rl['seven_day'] ?? rl['secondary_window'] ?? rl['7d'])
+      const base = sevenDay ?? fiveHour
+      if (base) {
+        return {
+          used: Math.round(base.utilization),
+          limit: 100,
+          utilization: base.utilization,
+          resetDate: base.resetDate,
+          unit: sevenDay ? '7d' : '5h',
+          fiveHourUtilization: fiveHour?.utilization ?? null,
+          fiveHourResetDate: fiveHour?.resetDate ?? null,
+        }
+      }
+    }
+    // 既存の parseResponse でも試みる
+    return this.parseResponse(data)
   }
 
   async fetchData(): Promise<CodexUsageData | null> {
-    try {
-      await this.loadChatGPT()
-    } catch {
-      return null
-    }
+    const interceptResult = await this.fetchViaPageIntercept()
+    if (interceptResult) return interceptResult
 
     const win = this.ensureWindow()
 
     type RawResult =
-      | { error: string }
+      | { error: string; statuses?: Record<string, number> }
       | { endpoint: string; data: unknown }
 
     let raw: RawResult | null = null
 
-    const currentUrl = win.webContents.getURL()
-    this.log('codex: current page URL:', currentUrl)
-
+    this.log('codex: page URL before fetch:', win.webContents.getURL())
     try {
       raw = await win.webContents.executeJavaScript(`
         (async () => {
           try {
-            // ログイン確認: /backend-api/me が実ユーザーデータを返すか確認
-            const meRes = await fetch('/backend-api/me', { credentials: 'include' })
-            if (!meRes.ok) return { error: 'not-logged-in:' + meRes.status }
-            const meData = await meRes.json()
-            // email または id がない場合はゲスト/未ログイン
-            const userId = meData?.email || meData?.id || meData?.user_id || ''
-            if (!userId) return { error: 'not-logged-in:guest' }
-
-            // NextAuth セッションからアクセストークンを取得
-            let accessToken = ''
-            try {
-              const sessionRes = await fetch('/api/auth/session', { credentials: 'include' })
-              if (sessionRes.ok) {
-                const session = await sessionRes.json()
-                accessToken = session?.accessToken || session?.user?.accessToken || ''
-              }
-            } catch {}
-
-            const authHeaders = accessToken
-              ? { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' }
-              : { 'Content-Type': 'application/json' }
-
-            // Codex 使用量エンドポイントを試行（内部 API、仕様未公開）
             const candidates = [
+              '/backend-api/wham/usage',
               '/backend-api/codex/usage',
               '/backend-api/codex/cloud/usage',
-              '/api/v1/codex/cloud/usage',
-              '/api/codex/usage',
-              '/backend-api/limits',
+              '/backend-api/codex/cloud/rate_limit',
+              '/backend-api/codex/cloud/limits',
             ]
             const statuses = {}
             for (const ep of candidates) {
-              const r = await fetch(ep, { credentials: 'include', headers: authHeaders })
-              statuses[ep] = r.status
-              if (r.ok) {
-                const d = await r.json()
-                return { endpoint: ep, data: d }
-              }
+              try {
+                const r = await fetch(ep, { credentials: 'include' })
+                statuses[ep] = r.status
+                if (r.ok) {
+                  const d = await r.json()
+                  return { endpoint: ep, data: d }
+                }
+              } catch (_) {}
             }
-            return { error: 'no-endpoint', me: userId, token: !!accessToken, statuses }
+            let me = ''
+            try {
+              const meRes = await fetch('/backend-api/me', { credentials: 'include' })
+              if (meRes.ok) {
+                const meData = await meRes.json()
+                me = meData?.email || meData?.id || ''
+              }
+            } catch (_) {}
+            return { error: 'no-endpoint', me, statuses }
           } catch (e) {
             return { error: String(e) }
           }
         })()
       `, true) as RawResult
-    } catch {
+    } catch (e) {
+      this.log('codex: executeJavaScript error:', e)
       return null
     }
 
@@ -150,8 +235,10 @@ export class CodexFetcher {
 
     if (!raw || 'error' in raw) {
       const err = (raw as { error: string } | null)?.error ?? ''
-      if (err.includes('not-logged-in')) this.setStatus('logged-out')
-      // no-endpoint = ログイン済みだがエンドポイント未発見
+      if (err.includes('not-logged-in')) {
+        this.setStatus('logged-out')
+        this.analyticsLoaded = false  // 再ロードを強制
+      }
       if (err === 'no-endpoint' || err.startsWith('no-endpoint')) this.setStatus('logged-in')
       return null
     }
@@ -162,19 +249,11 @@ export class CodexFetcher {
     return this.parseResponse(r.data)
   }
 
-  /**
-   * レスポンスから使用量データを解析する。
-   *
-   * 確認済み構造（/backend-api/codex/usage）:
-   *   rate_limit.secondary_window.{used_percent, reset_at, limit_window_seconds}
-   *   rate_limit.primary_window.{used_percent, reset_at} (5時間ローリング)
-   *   plan_type
-   */
   private parseResponse(data: unknown): CodexUsageData | null {
     if (!data || typeof data !== 'object') return null
     const d = data as Record<string, unknown>
 
-    // rate_limit 形式（確認済み: /backend-api/codex/usage）
+    // { rate_limit: { primary_window, secondary_window } } 形式
     const rateLimit = d['rate_limit']
     if (rateLimit && typeof rateLimit === 'object') {
       const rl = rateLimit as Record<string, unknown>
@@ -207,7 +286,7 @@ export class CodexFetcher {
       }
     }
 
-    // フラットフィールド形式（将来の構造変更に備えたフォールバック）
+    // フラットフィールド形式（フォールバック）
     const src = (d['codex'] && typeof d['codex'] === 'object')
       ? d['codex'] as Record<string, unknown>
       : d
@@ -226,13 +305,12 @@ export class CodexFetcher {
 
   async showLoginWindow(): Promise<void> {
     const win = this.ensureWindow()
-    const current = win.webContents.getURL()
-    if (!current.includes('chatgpt.com') && !current.includes('chat.openai.com')) {
-      await new Promise<void>((resolve) => {
-        win.webContents.once('did-finish-load', resolve)
-        win.loadURL('https://chatgpt.com').catch(resolve)
-      })
-    }
+    // ログイン時は必ず chatgpt.com ルートから開始し、セッションをリセットする
+    this.analyticsLoaded = false
+    await new Promise<void>((resolve) => {
+      win.webContents.once('did-finish-load', resolve)
+      win.loadURL('https://chatgpt.com').catch(resolve)
+    })
     win.show()
     win.focus()
   }
