@@ -16,7 +16,7 @@ export type CodexLoginStatus = 'logged-in' | 'logged-out' | 'unknown'
  * [β] OpenAI Codex Cloud の使用量を取得する。
  *
  * chatgpt.com/codex/cloud/settings/analytics をコンテキストとして使用し、
- * /backend-api/codex/usage を呼び出す。
+ * /backend-api/wham/usage を呼び出す。
  * analytics ページに遷移することでセッションが有効になり、401 を回避できる。
  */
 export class CodexFetcher {
@@ -24,7 +24,6 @@ export class CodexFetcher {
   private loginStatus: CodexLoginStatus = 'unknown'
   private logCallback: ((...args: unknown[]) => void) | null = null
   private statusChangeCallback: ((status: CodexLoginStatus) => void) | null = null
-  private analyticsLoaded = false
 
   setLogCallback(cb: (...args: unknown[]) => void): void { this.logCallback = cb }
   setStatusChangeCallback(cb: (status: CodexLoginStatus) => void): void { this.statusChangeCallback = cb }
@@ -57,7 +56,7 @@ export class CodexFetcher {
         : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
     )
     win.on('close', (e) => { e.preventDefault(); win.hide() })
-    win.on('closed', () => { this.win = null; this.analyticsLoaded = false })
+    win.on('closed', () => { this.win = null })
     return win
   }
 
@@ -72,36 +71,37 @@ export class CodexFetcher {
     const session = win.webContents.session
 
     // wham/usage リクエストのヘッダーと URL を記録する
-    let capturedWhamHeaders: Record<string, string> | null = null
+    let capturedWhamHeaders: Record<string, string | string[]> | null = null
     let capturedWhamUrl: string | null = null
+
+    const whamFilter = { urls: ['https://chatgpt.com/backend-api/wham/*'] }
 
     const headerHandler = (
       details: Electron.OnBeforeSendHeadersListenerDetails,
       callback: (response: Electron.CallbackResponse) => void
     ) => {
       if (details.url.includes('wham/usage') && !details.url.includes('breakdown') && !details.url.includes('daily')) {
-        capturedWhamHeaders = details.requestHeaders as Record<string, string>
+        capturedWhamHeaders = details.requestHeaders
         capturedWhamUrl = details.url
         this.log('codex: captured wham/usage headers:', Object.keys(capturedWhamHeaders))
       }
       callback({ requestHeaders: details.requestHeaders })
     }
 
-    session.webRequest.onBeforeSendHeaders(
-      { urls: ['https://chatgpt.com/backend-api/wham/*'] },
-      headerHandler
-    )
+    session.webRequest.onBeforeSendHeaders(whamFilter, headerHandler)
 
-    await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, 15000)
-      win.webContents.once('did-finish-load', () => {
-        clearTimeout(timer)
-        setTimeout(resolve, 3000)
+    try {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 15000)
+        win.webContents.once('did-finish-load', () => {
+          clearTimeout(timer)
+          setTimeout(resolve, 3000)
+        })
+        win.loadURL('https://chatgpt.com/codex/cloud/settings/analytics').catch(() => resolve())
       })
-      win.loadURL('https://chatgpt.com/codex/cloud/settings/analytics').catch(() => resolve())
-    })
-
-    session.webRequest.onBeforeSendHeaders(null as unknown as Electron.OnBeforeSendHeadersListener)
+    } finally {
+      session.webRequest.onBeforeSendHeaders(whamFilter, null)
+    }
 
     if (!capturedWhamHeaders || !capturedWhamUrl) {
       this.log('codex: wham/usage not captured')
@@ -237,7 +237,6 @@ export class CodexFetcher {
       const err = (raw as { error: string } | null)?.error ?? ''
       if (err.includes('not-logged-in')) {
         this.setStatus('logged-out')
-        this.analyticsLoaded = false  // 再ロードを強制
       }
       if (err === 'no-endpoint' || err.startsWith('no-endpoint')) this.setStatus('logged-in')
       return null
@@ -305,8 +304,6 @@ export class CodexFetcher {
 
   async showLoginWindow(): Promise<void> {
     const win = this.ensureWindow()
-    // ログイン時は必ず chatgpt.com ルートから開始し、セッションをリセットする
-    this.analyticsLoaded = false
     await new Promise<void>((resolve) => {
       win.webContents.once('did-finish-load', resolve)
       win.loadURL('https://chatgpt.com').catch(resolve)
