@@ -18,7 +18,7 @@ Always-on-top floating window showing usage bars at a glance.
 - **OA** — 7-day OAuth Apps window (Claude Code, Cursor, Windsurf, etc.)
 - **Opus** — 7-day Opus window
 - **EX** — Extra usage (monthly add-on credits, when enabled)
-- **β** — Beta provider bars (GitHub Copilot, OpenAI Codex — when enabled)
+- **β** — Beta provider bars (GitHub Copilot, OpenAI Codex, Google Gemini — when enabled)
 
 ### Detail View
 Expanded view with full usage cards, reset times, and a usage history chart.
@@ -38,6 +38,7 @@ Optional support for usage data from other AI services:
 
 - **GitHub Copilot** — Monthly premium request usage, fetched via `gh auth token` (GitHub CLI must be installed and authenticated)
 - **OpenAI Codex Cloud** — Monthly usage, fetched via a hidden browser window maintaining your chatgpt.com session
+- **Google Gemini** — Daily quota for Gemini 2.5 Pro and Gemini 2.5 Flash, fetched using the Gemini CLI's cached OAuth credentials (`~/.gemini/oauth_creds.json`). Requires [Gemini CLI](https://github.com/google-gemini/gemini-cli) to be installed and authenticated.
 
 Enable each provider individually in **Settings → β Providers**. When data is unavailable (not logged in, API changed, etc.), the card shows "Data unavailable" without affecting the rest of the app.
 
@@ -94,7 +95,7 @@ English and Japanese, with automatic OS language detection.
 | **Update Interval** | 1 / 5 / 10 / 30 minutes |
 | **Floating Window** | Always on top, opacity |
 | **Alerts** | Notification threshold (%) per usage window |
-| **β Providers** | Enable GitHub Copilot and/or OpenAI Codex usage tracking |
+| **β Providers** | Enable GitHub Copilot, OpenAI Codex, and/or Google Gemini usage tracking |
 
 ---
 

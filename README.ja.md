@@ -18,7 +18,7 @@ Claude の使用状況をメニューバーとフローティングウィンド�
 - **OA** — 7日間 OAuth アプリ（Claude Code, Cursor, Windsurf 等）
 - **Opus** — 7日間 Opus
 - **EX** — Extra 使用量（月次追加クレジット、有効時のみ表示）
-- **β** — β プロバイダーバー（GitHub Copilot, OpenAI Codex — 有効時のみ表示）
+- **β** — β プロバイダーバー（GitHub Copilot, OpenAI Codex, Google Gemini — 有効時のみ表示）
 
 ### 詳細表示
 リセット時刻・残り時間・使用履歴チャートを含む詳細ビューです。
@@ -38,6 +38,7 @@ Claude の使用状況をメニューバーとフローティングウィンド�
 
 - **GitHub Copilot** — 月間プレミアムリクエスト使用量。`gh auth token`（GitHub CLI のインストールとログインが必要）で取得します
 - **OpenAI Codex Cloud** — 月間使用量。非表示ブラウザウィンドウで chatgpt.com セッションを維持して取得します
+- **Google Gemini** — Gemini 2.5 Pro・Gemini 2.5 Flash の日次クォータ残量。Gemini CLI のキャッシュ済み OAuth 認証情報（`~/.gemini/oauth_creds.json`）を使用して取得します。[Gemini CLI](https://github.com/google-gemini/gemini-cli) のインストールと認証済みであることが必要です
 
 **設定 → β プロバイダー** で各プロバイダーを個別に有効化できます。未ログインや API 変更などでデータ取得できない場合はカードに "Data unavailable" と表示され、他の機能には影響しません。
 
@@ -94,7 +95,7 @@ Claude の使用状況をメニューバーとフローティングウィンド�
 | **更新間隔** | 1 / 5 / 10 / 30 分 |
 | **フローティングウィンドウ** | 最前面表示・透明度 |
 | **アラート** | 各使用枠の通知閾値 (%) |
-| **β プロバイダー** | GitHub Copilot・OpenAI Codex の使用量追跡を有効化 |
+| **β プロバイダー** | GitHub Copilot・OpenAI Codex・Google Gemini の使用量追跡を有効化 |
 
 ---
 
