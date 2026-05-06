@@ -82,7 +82,7 @@ const DETAIL_W = 360
 const DETAIL_H_BASE = 580
 const DETAIL_BETA_H = 88  // βカード1枚あたりの追加高さ
 const COMPACT_W = 320
-const COMPACT_BAR_H = 46   // 1本のバーの高さ（ペースライン含む）
+const COMPACT_BAR_H = 38   // 1本のバーの高さ（ペースライン含む、bar=28+margin=4+pace=4+gap=2）
 const COMPACT_BTN_H = 28   // ボタン行の高さ
 const COMPACT_PAD = 8      // 上下パディング合計
 

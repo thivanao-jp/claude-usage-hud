@@ -148,7 +148,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
               <div
                 style={{
                   position: 'relative',
-                  height: 34,
+                  height: 28,
                   borderRadius: 4,
                   overflow: 'hidden',
                   background: th.bgBar,
@@ -206,7 +206,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
             <div
               style={{
                 position: 'relative',
-                height: 34,
+                height: 28,
                 borderRadius: 4,
                 overflow: 'hidden',
                 marginBottom: 4,
@@ -239,7 +239,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
           const { date, time, rel } = formatReset(d?.resetDate ?? null, t('timeNow'))
           return (
             <div style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
-              <div style={{ position: 'relative', height: 34, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
+              <div style={{ position: 'relative', height: 28, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
                 <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
                 <div style={barTextStyle}>
                   <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>Cpl β</span>
@@ -249,6 +249,9 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
                   <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{d ? rel.minor : ''}</span>
                   <span style={{ flex: 1, textAlign: 'right' }}>{d ? `${pct}%` : '—'}</span>
                 </div>
+              </div>
+              <div style={{ height: 3, borderRadius: 1, background: th.bgBar, marginTop: 1, overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%', background: th.textMuted, borderRadius: 1, opacity: 0.5, transition: 'width 0.4s ease' }} />
               </div>
             </div>
           )
@@ -269,7 +272,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
             reset: ReturnType<typeof formatReset>; hasData: boolean
           }) => (
             <div style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
-              <div style={{ position: 'relative', height: 34, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
+              <div style={{ position: 'relative', height: 28, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
                 <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
                 <div style={barTextStyle}>
                   <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>{label}</span>
@@ -279,6 +282,9 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
                   <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{hasData ? reset.rel.minor : ''}</span>
                   <span style={{ flex: 1, textAlign: 'right' }}>{hasData ? `${pct}%` : '—'}</span>
                 </div>
+              </div>
+              <div style={{ height: 3, borderRadius: 1, background: th.bgBar, marginTop: 1, overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%', background: th.textMuted, borderRadius: 1, opacity: 0.5, transition: 'width 0.4s ease' }} />
               </div>
             </div>
           )
@@ -295,15 +301,14 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
           const GeminiBar = ({ label, model, data }: {
             label: string; model: string; data: GeminiModelData | null
           }) => {
-            // Gemini shows remaining %, bar fills = consumed
-            const remaining = data?.remainingPct ?? 100
-            const consumed = 100 - remaining
-            const barColor = consumed >= 90 ? '#e05a2b' : consumed >= 60 ? '#e0a12b' : '#4285f4'
+            // 他バーと統一: 消費量をバー幅で表示
+            const consumed = data != null ? 100 - data.remainingPct : 0
+            const barColor = consumed >= 90 ? '#e05a2b' : consumed >= 70 ? '#e0a12b' : '#4285f4'
             const reset = formatReset(data?.resetTime ?? null, t('timeNow'))
             void model
             return (
               <div style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
-                <div style={{ position: 'relative', height: 34, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
+                <div style={{ position: 'relative', height: 28, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
                   <div style={{ position: 'absolute', inset: 0, width: `${consumed}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
                   <div style={barTextStyle}>
                     <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>{label}</span>
@@ -311,8 +316,11 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
                     <span style={{ width: 44, flexShrink: 0 }}>{data ? reset.time : ''}</span>
                     <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{data ? reset.rel.major : ''}</span>
                     <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{data ? reset.rel.minor : ''}</span>
-                    <span style={{ flex: 1, textAlign: 'right' }}>{data ? `${remaining}%` : '—'}</span>
+                    <span style={{ flex: 1, textAlign: 'right' }}>{data ? `${consumed}%` : '—'}</span>
                   </div>
+                </div>
+                <div style={{ height: 3, borderRadius: 1, background: th.bgBar, marginTop: 1, overflow: 'hidden' }}>
+                  <div style={{ width: `${consumed}%`, height: '100%', background: th.textMuted, borderRadius: 1, opacity: 0.5, transition: 'width 0.4s ease' }} />
                 </div>
               </div>
             )
