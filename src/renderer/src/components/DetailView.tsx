@@ -354,9 +354,9 @@ function GeminiUsageCard({ label, data }: { label: string; data: GeminiModelData
     )
   }
 
-  // remainingPct = 残量 (100 = full)、バーは消費量を表示
+  // 他カードと統一: 消費量をバー幅で表示
   const consumed = Math.min(100 - data.remainingPct, 100)
-  const barColor = consumed >= 90 ? '#e05a2b' : consumed >= 60 ? '#e0a12b' : GEMINI_BLUE
+  const barColor = consumed >= 90 ? '#e05a2b' : consumed >= 70 ? '#e0a12b' : GEMINI_BLUE
   const resetDate = data.resetTime ? new Date(data.resetTime) : null
 
   return (
@@ -372,7 +372,7 @@ function GeminiUsageCard({ label, data }: { label: string; data: GeminiModelData
         <div style={{ width: `${consumed}%`, height: '100%', background: barColor, borderRadius: 3, transition: 'width 0.4s ease' }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-        <span style={{ color: th.textMuted }}>{t('betaMonthlyUsed', String(consumed), '100', '%')}</span>
+        <span style={{ color: th.textMuted }}>{consumed}% used</span>
         {resetDate && (
           <span style={{ color: th.textMuted }}>
             {t('betaResetLabel')} {resetDate.toLocaleDateString([], { month: 'short', day: 'numeric' })}
