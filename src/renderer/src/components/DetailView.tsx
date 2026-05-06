@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { UsageData, ProfileData, ExtraUsage, Settings, UsageEntry, BetaProvidersData, CopilotUsageData, CodexUsageData } from '../types'
+import { UsageData, ProfileData, ExtraUsage, Settings, UsageEntry, BetaProvidersData, CopilotUsageData, CodexUsageData, GeminiModelData } from '../types'
 import { UsageCard } from './UsageCard'
 import { HistoryChart } from './HistoryChart'
 import { useT } from '../LangContext'
@@ -57,7 +57,7 @@ export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, o
   const lang = useLang()
   const [showChart, setShowChart] = useState(false)
   const [chartDays, setChartDays] = useState(7)
-  const [beta, setBeta] = useState<BetaProvidersData>({ copilot: null, codex: null })
+  const [beta, setBeta] = useState<BetaProvidersData>({ copilot: null, codex: null, gemini: null })
 
   useEffect(() => {
     window.api.getBetaData().then(setBeta).catch(() => {})
@@ -158,7 +158,7 @@ export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, o
       </div>
 
       {/* Beta Provider Cards */}
-      {(settings.betaProviders?.copilot?.enabled || settings.betaProviders?.codex?.enabled) && (
+      {(settings.betaProviders?.copilot?.enabled || settings.betaProviders?.codex?.enabled || settings.betaProviders?.gemini?.enabled) && (
         <div style={{ padding: '0 10px 4px' }}>
           <div style={{ fontSize: 10, color: th.textMuted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4, paddingLeft: 2 }}>
             β Providers
@@ -195,6 +195,12 @@ export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, o
                 color="#10a37f"
                 unit={beta.codex?.unit ?? '%'}
               />
+            </>
+          )}
+          {settings.betaProviders?.gemini?.enabled && (
+            <>
+              <GeminiUsageCard label="Google Gemini 2.5 Pro" data={beta.gemini?.pro ?? null} />
+              <GeminiUsageCard label="Google Gemini 2.5 Flash" data={beta.gemini?.flash ?? null} />
             </>
           )}
         </div>
@@ -324,6 +330,52 @@ function BetaUsageCard({ label, data, color, unit }: { label: string; data: Copi
         {data.resetDate && (
           <span style={{ color: th.textMuted }}>
             {t('betaResetLabel')} {new Date(data.resetDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function GeminiUsageCard({ label, data }: { label: string; data: GeminiModelData | null }) {
+  const t = useT()
+  const th = useTheme()
+  const GEMINI_BLUE = '#4285f4'
+
+  if (!data) {
+    return (
+      <div style={{ background: th.bgCardExtra, border: `1px solid ${th.borderCardExtra}`, borderRadius: 8, padding: '7px 10px', marginBottom: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: th.textSub }}>{label}</span>
+          <span style={{ fontSize: 10, color: '#e0a12b', background: '#e0a12b18', border: '1px solid #e0a12b33', borderRadius: 4, padding: '1px 6px' }}>β</span>
+        </div>
+        <div style={{ fontSize: 11, color: th.textFaint, marginTop: 4 }}>{t('betaDataUnavailable')}</div>
+      </div>
+    )
+  }
+
+  // remainingPct = 残量 (100 = full)、バーは消費量を表示
+  const consumed = Math.min(100 - data.remainingPct, 100)
+  const barColor = consumed >= 90 ? '#e05a2b' : consumed >= 60 ? '#e0a12b' : GEMINI_BLUE
+  const resetDate = data.resetTime ? new Date(data.resetTime) : null
+
+  return (
+    <div style={{ background: th.bgCardExtra, border: `1px solid ${th.borderCardExtra}`, borderRadius: 8, padding: '7px 10px', marginBottom: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: th.textSub }}>{label}</span>
+          <span style={{ fontSize: 10, color: '#e0a12b', background: '#e0a12b18', border: '1px solid #e0a12b33', borderRadius: 4, padding: '1px 5px' }}>β</span>
+        </div>
+        <span style={{ fontSize: 16, fontWeight: 700, color: barColor }}>{data.remainingPct}%</span>
+      </div>
+      <div style={{ background: th.bgBar, borderRadius: 3, height: 5, marginBottom: 5, overflow: 'hidden' }}>
+        <div style={{ width: `${consumed}%`, height: '100%', background: barColor, borderRadius: 3, transition: 'width 0.4s ease' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+        <span style={{ color: th.textMuted }}>{t('betaMonthlyUsed', String(consumed), '100', '%')}</span>
+        {resetDate && (
+          <span style={{ color: th.textMuted }}>
+            {t('betaResetLabel')} {resetDate.toLocaleDateString([], { month: 'short', day: 'numeric' })}
           </span>
         )}
       </div>

@@ -49,6 +49,7 @@ export function SettingsView({ onSettingsChange }: Props) {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
   const [copilotStatus, setCopilotStatus] = useState<ProviderStatus>('unknown')
   const [codexStatus, setCodexStatus] = useState<ProviderStatus>('unknown')
+  const [geminiStatus, setGeminiStatus] = useState<ProviderStatus>('unknown')
 
   useEffect(() => {
     window.api.getSettings().then(setS)
@@ -57,6 +58,7 @@ export function SettingsView({ onSettingsChange }: Props) {
     window.api.getAppVersion().then(setAppVersion)
     window.api.getCopilotLoginStatus().then(setCopilotStatus)
     window.api.getCodexLoginStatus().then(setCodexStatus)
+    window.api.getGeminiLoginStatus().then(setGeminiStatus)
     const offLogin = window.api.onLoginStatusChanged(status => setLoginStatus(status))
     const offUpdate = window.api.onUpdateStatus(status => setUpdateStatus(status as UpdateStatus))
     return () => { offLogin(); offUpdate() }
@@ -384,7 +386,7 @@ export function SettingsView({ onSettingsChange }: Props) {
         </div>
 
         {/* OpenAI Codex */}
-        <div>
+        <div style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <CheckRow
               label={t('betaCodexLabel')}
@@ -401,6 +403,26 @@ export function SettingsView({ onSettingsChange }: Props) {
             </button>
           </div>
           <div style={{ fontSize: 11, color: th.textFaint2, paddingLeft: 20 }}>{t('betaCodexDesc')}</div>
+        </div>
+
+        {/* Google Gemini */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <CheckRow
+              label={t('betaGeminiLabel')}
+              checked={s.betaProviders?.gemini?.enabled ?? false}
+              onChange={v => upd(p => ({ ...p, betaProviders: { ...p.betaProviders, gemini: { enabled: v } } }))}
+              th={th}
+            />
+            <StatusDot status={geminiStatus} t={t} />
+            <button
+              onClick={() => window.api.showGeminiLoginWindow()}
+              style={{ ...secondaryBtn, marginLeft: 'auto', fontSize: 11 }}
+            >
+              {t('betaLoginBtn')}
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: th.textFaint2, paddingLeft: 20 }}>{t('betaGeminiDesc')}</div>
         </div>
       </Section>
 

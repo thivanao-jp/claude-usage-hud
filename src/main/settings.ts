@@ -44,6 +44,7 @@ export interface Settings {
   betaProviders?: {
     copilot?: { enabled: boolean }
     codex?: { enabled: boolean }
+    gemini?: { enabled: boolean }
   }
 }
 
