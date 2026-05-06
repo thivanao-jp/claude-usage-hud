@@ -22,6 +22,7 @@ import { getTokenFromCredentials } from './credentials'
 import { ClaudeWebFetcher } from './claudeWebFetcher'
 import { GitHubCopilotFetcher } from './githubCopilotFetcher'
 import { CodexFetcher } from './codexFetcher'
+import { GeminiFetcher } from './geminiFetcher'
 import { createBarIcon } from './trayIcon'
 
 // stdoutがバッファリングされることがあるため、ログは直接ファイルに書き込む
@@ -46,11 +47,12 @@ let updateDownloaded = false
 const claudeWebFetcher = new ClaudeWebFetcher()
 const copilotFetcher = new GitHubCopilotFetcher()
 const codexFetcher = new CodexFetcher()
+const geminiFetcher = new GeminiFetcher()
 
 let lastUsage: UsageData | null = null
 let lastProfile: ProfileData | null = null
 let lastSuccessAt: Date | null = null
-let lastBeta: BetaProvidersData = { copilot: null, codex: null }
+let lastBeta: BetaProvidersData = { copilot: null, codex: null, gemini: null }
 
 // ---- Display Helper ----
 
@@ -94,14 +96,16 @@ function getCompactHeight(settings: Settings): number {
     bp.copilot?.enabled ?? false,
     bp.codex?.enabled ?? false,  // 5h bar
     bp.codex?.enabled ?? false,  // 7d bar (Codex is always 2 bars)
+    bp.gemini?.enabled ?? false,  // Pro bar
+    bp.gemini?.enabled ?? false,  // Flash bar
   ].filter(Boolean).length || 1
   return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD
 }
 
 function getDetailHeight(settings: Settings): number {
   const bp = settings.betaProviders ?? {}
-  // Codex は 5h + 7d で2枚になるためカウント2
-  const betaCount = (bp.copilot?.enabled ? 1 : 0) + (bp.codex?.enabled ? 2 : 0)
+  // Codex は 5h + 7d で2枚、Gemini は Pro + Flash で2枚
+  const betaCount = (bp.copilot?.enabled ? 1 : 0) + (bp.codex?.enabled ? 2 : 0) + (bp.gemini?.enabled ? 2 : 0)
   return DETAIL_H_BASE + betaCount * DETAIL_BETA_H
 }
 
@@ -375,7 +379,7 @@ async function doUpdate(): Promise<void> {
 async function doUpdateBeta(): Promise<void> {
   const settings = loadSettings()
   const bp = settings.betaProviders ?? {}
-  const results: BetaProvidersData = { copilot: null, codex: null }
+  const results: BetaProvidersData = { copilot: null, codex: null, gemini: null }
 
   if (bp.copilot?.enabled) {
     try {
@@ -392,6 +396,15 @@ async function doUpdateBeta(): Promise<void> {
       log('doUpdateBeta: codex=', results.codex)
     } catch (e) {
       log('doUpdateBeta: codex error:', e)
+    }
+  }
+
+  if (bp.gemini?.enabled) {
+    try {
+      results.gemini = await geminiFetcher.fetchData()
+      log('doUpdateBeta: gemini=', results.gemini)
+    } catch (e) {
+      log('doUpdateBeta: gemini error:', e)
     }
   }
 
@@ -486,10 +499,13 @@ ipcMain.handle('install-update', () => autoUpdater.quitAndInstall())
 ipcMain.handle('get-beta-data', () => lastBeta)
 ipcMain.handle('get-copilot-login-status', () => copilotFetcher.getLoginStatus())
 ipcMain.handle('get-codex-login-status', () => codexFetcher.getLoginStatus())
+ipcMain.handle('get-gemini-login-status', () => geminiFetcher.getLoginStatus())
 ipcMain.handle('show-copilot-login-window', () => copilotFetcher.showLoginWindow())
 ipcMain.handle('hide-copilot-login-window', () => copilotFetcher.hideLoginWindow())
 ipcMain.handle('show-codex-login-window', () => codexFetcher.showLoginWindow())
 ipcMain.handle('hide-codex-login-window', () => codexFetcher.hideLoginWindow())
+ipcMain.handle('show-gemini-login-window', () => geminiFetcher.showLoginWindow())
+ipcMain.handle('hide-gemini-login-window', () => geminiFetcher.hideLoginWindow())
 
 // ---- App Lifecycle ----
 
@@ -622,11 +638,15 @@ if (!gotTheLock) {
     claudeWebFetcher.setLogCallback(log)
     copilotFetcher.setLogCallback(log)
     codexFetcher.setLogCallback(log)
+    geminiFetcher.setLogCallback(log)
     copilotFetcher.setStatusChangeCallback((status) => {
       log('copilot login status changed:', status)
     })
     codexFetcher.setStatusChangeCallback((status) => {
       log('codex login status changed:', status)
+    })
+    geminiFetcher.setStatusChangeCallback((status) => {
+      log('gemini login status changed:', status)
     })
 
     // 起動時にキャッシュ済み orgUuid を復元
@@ -670,6 +690,7 @@ if (!gotTheLock) {
     claudeWebFetcher.destroy()
     copilotFetcher.destroy()
     codexFetcher.destroy()
+    geminiFetcher.destroy()
   })
 
   app.on('window-all-closed', (e) => { e.preventDefault() })

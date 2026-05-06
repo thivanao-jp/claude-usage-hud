@@ -1,4 +1,4 @@
-import { UsageData, Settings, ExtraUsage, UsageEntry, BetaProvidersData } from '../types'
+import { UsageData, Settings, ExtraUsage, UsageEntry, BetaProvidersData, GeminiModelData } from '../types'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { calcPacePct } from '../paceUtil'
@@ -287,6 +287,40 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
             <>
               <BetaBar label="Cdx5β" pct={pct5} barColor={color5} reset={reset5} hasData={d?.fiveHourUtilization != null} />
               <BetaBar label="Cdx7β" pct={pct7} barColor={color7} reset={reset7} hasData={d != null} />
+            </>
+          )
+        })()}
+        {settings.betaProviders?.gemini?.enabled && (() => {
+          const g = beta?.gemini ?? null
+          const GeminiBar = ({ label, model, data }: {
+            label: string; model: string; data: GeminiModelData | null
+          }) => {
+            // Gemini shows remaining %, bar fills = consumed
+            const remaining = data?.remainingPct ?? 100
+            const consumed = 100 - remaining
+            const barColor = consumed >= 90 ? '#e05a2b' : consumed >= 60 ? '#e0a12b' : '#4285f4'
+            const reset = formatReset(data?.resetTime ?? null, t('timeNow'))
+            void model
+            return (
+              <div style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
+                <div style={{ position: 'relative', height: 34, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
+                  <div style={{ position: 'absolute', inset: 0, width: `${consumed}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
+                  <div style={barTextStyle}>
+                    <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>{label}</span>
+                    <span style={{ width: 72, flexShrink: 0 }}>{data ? reset.date : '—'}</span>
+                    <span style={{ width: 44, flexShrink: 0 }}>{data ? reset.time : ''}</span>
+                    <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{data ? reset.rel.major : ''}</span>
+                    <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{data ? reset.rel.minor : ''}</span>
+                    <span style={{ flex: 1, textAlign: 'right' }}>{data ? `${remaining}%` : '—'}</span>
+                  </div>
+                </div>
+              </div>
+            )
+          }
+          return (
+            <>
+              <GeminiBar label="Gmn Proβ" model="gemini-2.5-pro" data={g?.pro ?? null} />
+              <GeminiBar label="Gmn Flsβ" model="gemini-2.5-flash" data={g?.flash ?? null} />
             </>
           )
         })()}

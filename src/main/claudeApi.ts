@@ -94,7 +94,18 @@ export interface CodexUsageData {
   fiveHourResetDate: string | null
 }
 
+export interface GeminiModelData {
+  remainingPct: number   // 0–100 remaining
+  resetTime: string | null
+}
+
+export interface GeminiUsageData {
+  pro: GeminiModelData | null    // gemini-2.5-pro
+  flash: GeminiModelData | null  // gemini-2.5-flash
+}
+
 export interface BetaProvidersData {
   copilot: CopilotUsageData | null
   codex: CodexUsageData | null
+  gemini: GeminiUsageData | null
 }

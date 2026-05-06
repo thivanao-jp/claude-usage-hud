@@ -78,6 +78,7 @@ export interface Settings {
   betaProviders?: {
     copilot?: { enabled: boolean }
     codex?: { enabled: boolean }
+    gemini?: { enabled: boolean }
   }
 }
 
@@ -101,9 +102,20 @@ export interface CodexUsageData {
   fiveHourResetDate: string | null
 }
 
+export interface GeminiModelData {
+  remainingPct: number   // 0–100 remaining
+  resetTime: string | null
+}
+
+export interface GeminiUsageData {
+  pro: GeminiModelData | null
+  flash: GeminiModelData | null
+}
+
 export interface BetaProvidersData {
   copilot: CopilotUsageData | null
   codex: CodexUsageData | null
+  gemini: GeminiUsageData | null
 }
 
 export interface HistoryRow {
@@ -154,10 +166,13 @@ declare global {
       getBetaData: () => Promise<BetaProvidersData>
       getCopilotLoginStatus: () => Promise<'logged-in' | 'logged-out' | 'unknown'>
       getCodexLoginStatus: () => Promise<'logged-in' | 'logged-out' | 'unknown'>
+      getGeminiLoginStatus: () => Promise<'logged-in' | 'logged-out' | 'unknown'>
       showCopilotLoginWindow: () => Promise<void>
       hideCopilotLoginWindow: () => Promise<void>
       showCodexLoginWindow: () => Promise<void>
       hideCodexLoginWindow: () => Promise<void>
+      showGeminiLoginWindow: () => Promise<void>
+      hideGeminiLoginWindow: () => Promise<void>
     }
   }
 }
