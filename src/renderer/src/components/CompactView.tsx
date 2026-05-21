@@ -237,6 +237,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
           const pct = d ? Math.min(Math.round(d.utilization), 100) : 0
           const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : '#6e9ee8'
           const { date, time, rel } = formatReset(d?.resetDate ?? null, t('timeNow'))
+          const pacePct = d?.resetDate ? calcPacePct(d.resetDate, 30 * DAY, settings.pace) : null
           return (
             <div style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
               <div style={{ position: 'relative', height: 28, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
@@ -250,9 +251,11 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
                   <span style={{ flex: 1, textAlign: 'right' }}>{d ? `${pct}%` : '—'}</span>
                 </div>
               </div>
-              <div style={{ height: 3, borderRadius: 1, background: th.bgBar, marginTop: 1, overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%', background: th.textMuted, borderRadius: 1, opacity: 0.5, transition: 'width 0.4s ease' }} />
-              </div>
+              {pacePct != null && (
+                <div style={{ height: 3, borderRadius: 1, background: th.bgBar, marginTop: 1, overflow: 'hidden' }}>
+                  <div style={{ width: `${pacePct}%`, height: '100%', background: th.textMuted, borderRadius: 1, opacity: 0.5, transition: 'width 0.4s ease' }} />
+                </div>
+              )}
             </div>
           )
         })()}
@@ -262,14 +265,16 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
           const pct5 = d?.fiveHourUtilization != null ? Math.min(Math.round(d.fiveHourUtilization), 100) : 0
           const color5 = pct5 >= 90 ? '#e05a2b' : pct5 >= 70 ? '#e0a12b' : '#10a37f'
           const reset5 = formatReset(d?.fiveHourResetDate ?? null, t('timeNow'))
+          const pace5 = d?.fiveHourResetDate ? calcPacePct(d.fiveHourResetDate, 5 * HOUR, settings.pace) : null
           // 7d secondary window
           const pct7 = d ? Math.min(Math.round(d.utilization), 100) : 0
           const color7 = pct7 >= 90 ? '#e05a2b' : pct7 >= 70 ? '#e0a12b' : '#10a37f'
           const reset7 = formatReset(d?.resetDate ?? null, t('timeNow'))
+          const pace7 = d?.resetDate ? calcPacePct(d.resetDate, 7 * DAY, settings.pace) : null
 
-          const BetaBar = ({ label, pct, barColor, reset, hasData }: {
+          const BetaBar = ({ label, pct, barColor, reset, hasData, pacePct }: {
             label: string; pct: number; barColor: string
-            reset: ReturnType<typeof formatReset>; hasData: boolean
+            reset: ReturnType<typeof formatReset>; hasData: boolean; pacePct: number | null
           }) => (
             <div style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
               <div style={{ position: 'relative', height: 28, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
@@ -283,29 +288,30 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
                   <span style={{ flex: 1, textAlign: 'right' }}>{hasData ? `${pct}%` : '—'}</span>
                 </div>
               </div>
-              <div style={{ height: 3, borderRadius: 1, background: th.bgBar, marginTop: 1, overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%', background: th.textMuted, borderRadius: 1, opacity: 0.5, transition: 'width 0.4s ease' }} />
-              </div>
+              {pacePct != null && (
+                <div style={{ height: 3, borderRadius: 1, background: th.bgBar, marginTop: 1, overflow: 'hidden' }}>
+                  <div style={{ width: `${pacePct}%`, height: '100%', background: th.textMuted, borderRadius: 1, opacity: 0.5, transition: 'width 0.4s ease' }} />
+                </div>
+              )}
             </div>
           )
 
           return (
             <>
-              <BetaBar label="Cdx5β" pct={pct5} barColor={color5} reset={reset5} hasData={d?.fiveHourUtilization != null} />
-              <BetaBar label="Cdx7β" pct={pct7} barColor={color7} reset={reset7} hasData={d != null} />
+              <BetaBar label="Cdx5β" pct={pct5} barColor={color5} reset={reset5} hasData={d?.fiveHourUtilization != null} pacePct={pace5} />
+              <BetaBar label="Cdx7β" pct={pct7} barColor={color7} reset={reset7} hasData={d != null} pacePct={pace7} />
             </>
           )
         })()}
         {settings.betaProviders?.gemini?.enabled && (() => {
           const g = beta?.gemini ?? null
-          const GeminiBar = ({ label, model, data }: {
-            label: string; model: string; data: GeminiModelData | null
+          const GeminiBar = ({ label, data }: {
+            label: string; data: GeminiModelData | null
           }) => {
-            // 他バーと統一: 消費量をバー幅で表示
             const consumed = data != null ? 100 - data.remainingPct : 0
             const barColor = consumed >= 90 ? '#e05a2b' : consumed >= 70 ? '#e0a12b' : '#4285f4'
             const reset = formatReset(data?.resetTime ?? null, t('timeNow'))
-            void model
+            const pacePct = data?.resetTime ? calcPacePct(data.resetTime, 24 * HOUR, settings.pace) : null
             return (
               <div style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
                 <div style={{ position: 'relative', height: 28, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
@@ -319,16 +325,18 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
                     <span style={{ flex: 1, textAlign: 'right' }}>{data ? `${consumed}%` : '—'}</span>
                   </div>
                 </div>
-                <div style={{ height: 3, borderRadius: 1, background: th.bgBar, marginTop: 1, overflow: 'hidden' }}>
-                  <div style={{ width: `${consumed}%`, height: '100%', background: th.textMuted, borderRadius: 1, opacity: 0.5, transition: 'width 0.4s ease' }} />
-                </div>
+                {pacePct != null && (
+                  <div style={{ height: 3, borderRadius: 1, background: th.bgBar, marginTop: 1, overflow: 'hidden' }}>
+                    <div style={{ width: `${pacePct}%`, height: '100%', background: th.textMuted, borderRadius: 1, opacity: 0.5, transition: 'width 0.4s ease' }} />
+                  </div>
+                )}
               </div>
             )
           }
           return (
             <>
-              <GeminiBar label="Gmn Proβ" model="gemini-2.5-pro" data={g?.pro ?? null} />
-              <GeminiBar label="Gmn Flsβ" model="gemini-2.5-flash" data={g?.flash ?? null} />
+              <GeminiBar label="Gmn Proβ" data={g?.pro ?? null} />
+              <GeminiBar label="Gmn Flsβ" data={g?.flash ?? null} />
             </>
           )
         })()}

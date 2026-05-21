@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readFileSync, readdirSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { execSync } from 'child_process'
@@ -8,32 +8,43 @@ const QUOTA_ENDPOINT = 'https://cloudcode-pa.googleapis.com/v1internal:retrieveU
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 const GEMINI_HOME = join(homedir(), '.gemini')
 
+// Electron main process は shell の PATH を継承しないため、既知パスをハードコードする
+const COMMON_BUNDLE_DIRS = [
+  '/opt/homebrew/lib/node_modules/@google/gemini-cli/bundle',     // Homebrew (Apple Silicon)
+  '/usr/local/lib/node_modules/@google/gemini-cli/bundle',        // Homebrew (Intel)
+  join(homedir(), '.npm-global', 'lib', 'node_modules', '@google', 'gemini-cli', 'bundle'),
+  join(homedir(), 'node_modules', '.bin', '..', '@google', 'gemini-cli', 'bundle'),
+]
+
+function findBundleDirFromBin(): string[] {
+  try {
+    const extraPath = '/opt/homebrew/bin:/usr/local/bin:/usr/bin'
+    const envPath = process.env.PATH ?? ''
+    const geminiBin = execSync('which gemini', {
+      timeout: 3000,
+      env: { ...process.env, PATH: `${envPath}:${extraPath}` },
+    }).toString().trim()
+    if (!geminiBin || !existsSync(geminiBin)) return []
+    const binDir = join(geminiBin, '..')
+    return [
+      join(binDir, '..', 'lib', 'node_modules', '@google', 'gemini-cli', 'bundle'),
+      join(binDir, '..', '..', 'lib', 'node_modules', '@google', 'gemini-cli', 'bundle'),
+    ]
+  } catch {
+    return []
+  }
+}
+
 /**
  * Gemini CLI のバンドルファイルから OAuth クライアント情報を動的に読み取る。
  * これにより本リポジトリにシークレットをハードコードせずに済む。
  */
 function loadGeminiOAuthCredentials(): { clientId: string; clientSecret: string } | null {
   try {
-    // gemini コマンドのパスを解決
-    let geminiBin: string
-    try {
-      geminiBin = execSync('which gemini', { timeout: 3000 }).toString().trim()
-    } catch {
-      return null
-    }
-    if (!geminiBin || !existsSync(geminiBin)) return null
+    const searchPaths = [...new Set([...findBundleDirFromBin(), ...COMMON_BUNDLE_DIRS])]
 
-    // バンドルディレクトリ (bin/../lib/node_modules/...) を探す
-    const binDir = join(geminiBin, '..')
-    const bundleSearchPaths = [
-      join(binDir, '..', 'lib', 'node_modules', '@google', 'gemini-cli', 'bundle'),
-      join(binDir, '..', '..', 'lib', 'node_modules', '@google', 'gemini-cli', 'bundle'),
-    ]
-
-    for (const bundleDir of bundleSearchPaths) {
+    for (const bundleDir of searchPaths) {
       if (!existsSync(bundleDir)) continue
-      // OAUTH_CLIENT_ID と OAUTH_CLIENT_SECRET を含むチャンクを探す
-      const { readdirSync } = require('fs') as typeof import('fs')
       const files = readdirSync(bundleDir).filter((f: string) => f.endsWith('.js'))
       for (const file of files) {
         const content = readFileSync(join(bundleDir, file), 'utf-8')
@@ -99,14 +110,18 @@ export class GeminiFetcher {
     }
   }
 
-  private getRefreshToken(): string | null {
+  private getStoredCreds(): { accessToken: string | null; refreshToken: string | null; expiryDate: number | null } {
     try {
       const credsPath = join(GEMINI_HOME, 'oauth_creds.json')
-      if (!existsSync(credsPath)) return null
+      if (!existsSync(credsPath)) return { accessToken: null, refreshToken: null, expiryDate: null }
       const creds = JSON.parse(readFileSync(credsPath, 'utf-8')) as Record<string, unknown>
-      return (creds['refresh_token'] as string) ?? null
+      return {
+        accessToken:  (creds['access_token']  as string)  ?? null,
+        refreshToken: (creds['refresh_token'] as string)  ?? null,
+        expiryDate:   (creds['expiry_date']   as number)  ?? null,
+      }
     } catch {
-      return null
+      return { accessToken: null, refreshToken: null, expiryDate: null }
     }
   }
 
@@ -126,7 +141,13 @@ export class GeminiFetcher {
   }
 
   private async refreshAccessToken(): Promise<string | null> {
-    const refreshToken = this.getRefreshToken()
+    const { accessToken, refreshToken, expiryDate } = this.getStoredCreds()
+
+    // まだ有効なアクセストークンがあればそのまま使う（5分のバッファを設ける）
+    if (accessToken && expiryDate && expiryDate - Date.now() > 5 * 60 * 1000) {
+      return accessToken
+    }
+
     if (!refreshToken) return null
 
     const creds = loadGeminiOAuthCredentials()
