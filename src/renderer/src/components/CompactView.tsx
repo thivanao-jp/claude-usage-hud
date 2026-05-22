@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { UsageData, Settings, ExtraUsage, UsageEntry, BetaProvidersData, GeminiModelData } from '../types'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
@@ -65,6 +66,13 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
   const t = useT()
   const th = useTheme()
 
+  // 半透明時: マウスが乗っていない間はクリックスルー（背後ウィンドウに操作が届く）
+  const isTransparent = (settings.window.opacity ?? 100) < 100
+  useEffect(() => {
+    if (isTransparent) window.api.setIgnoreMouseEvents(true)
+    return () => { window.api.setIgnoreMouseEvents(false) }
+  }, [isTransparent])
+
   const usageRecord = usage as (Record<string, UsageEntry | null> | null)
   const showFields = settings.tray.showFields ?? {}
 
@@ -100,14 +108,18 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
   }
 
   return (
-    <div style={{
-      background: th.bg,
-      borderRadius: 8,
-      border: `1px solid ${th.border}`,
-      overflow: 'hidden',
-      userSelect: 'none',
-      WebkitAppRegion: 'drag' as any,
-    }}>
+    <div
+      onMouseEnter={() => { if (isTransparent) window.api.setIgnoreMouseEvents(false) }}
+      onMouseLeave={() => { if (isTransparent) window.api.setIgnoreMouseEvents(true) }}
+      style={{
+        background: th.bg,
+        borderRadius: 8,
+        border: `1px solid ${th.border}`,
+        overflow: 'hidden',
+        userSelect: 'none',
+        WebkitAppRegion: 'drag' as any,
+      }}
+    >
       {/* Button strip */}
       <div style={{
         display: 'flex',

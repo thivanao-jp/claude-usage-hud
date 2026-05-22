@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('update-status', (_e, status) => cb(status))
     return () => ipcRenderer.removeAllListeners('update-status')
   },
+  setIgnoreMouseEvents: (ignore: boolean) => ipcRenderer.send('set-ignore-mouse-events', ignore),
   // Beta providers
   getBetaData: () => ipcRenderer.invoke('get-beta-data'),
   getCopilotLoginStatus: () => ipcRenderer.invoke('get-copilot-login-status'),

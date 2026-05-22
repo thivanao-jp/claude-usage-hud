@@ -228,6 +228,17 @@ function switchViewMode(mode: ViewMode): void {
 
 // ---- Tray ----
 
+/**
+ * macOS tray アプリでは app.quit() を window-all-closed の preventDefault が
+ * ブロックする場合があるため、tray を先に破棄してから quitAndInstall() を呼ぶ。
+ */
+function quitAndInstall(): void {
+  app.removeAllListeners('window-all-closed')
+  if (tray && !tray.isDestroyed()) { tray.destroy(); tray = null }
+  BrowserWindow.getAllWindows().forEach(win => { try { win.destroy() } catch {} })
+  autoUpdater.quitAndInstall(false, true)
+}
+
 function buildContextMenu(): Menu {
   const items: Electron.MenuItemConstructorOptions[] = [
     { label: 'Show / Hide', click: () => toggleHudWindow() },
@@ -241,7 +252,7 @@ function buildContextMenu(): Menu {
 
   if (updateDownloaded) {
     items.push({ type: 'separator' })
-    items.push({ label: '✦ Restart to Update', click: () => autoUpdater.quitAndInstall() })
+    items.push({ label: '✦ Restart to Update', click: () => quitAndInstall() })
   }
 
   items.push({ type: 'separator' })
@@ -494,7 +505,11 @@ ipcMain.handle('hide-login-window', () => claudeWebFetcher.hideLoginWindow())
 ipcMain.handle('get-login-status', () => claudeWebFetcher.getLoginStatus())
 ipcMain.handle('get-app-version', () => app.getVersion())
 ipcMain.handle('check-for-updates', () => autoUpdater.checkForUpdates().catch(e => log('update check error:', e)))
-ipcMain.handle('install-update', () => autoUpdater.quitAndInstall())
+ipcMain.handle('install-update', () => quitAndInstall())
+ipcMain.on('set-ignore-mouse-events', (event, ignore: boolean) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  win?.setIgnoreMouseEvents(ignore, { forward: true })
+})
 // Beta providers
 ipcMain.handle('get-beta-data', () => lastBeta)
 ipcMain.handle('get-copilot-login-status', () => copilotFetcher.getLoginStatus())
