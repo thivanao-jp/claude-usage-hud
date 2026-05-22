@@ -108,27 +108,27 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
   }
 
   return (
-    <div
-      onMouseEnter={() => { if (isTransparent) window.api.setIgnoreMouseEvents(false) }}
-      onMouseLeave={() => { if (isTransparent) window.api.setIgnoreMouseEvents(true) }}
-      style={{
-        background: th.bg,
-        borderRadius: 8,
-        border: `1px solid ${th.border}`,
-        overflow: 'hidden',
-        userSelect: 'none',
-        WebkitAppRegion: 'drag' as any,
-      }}
-    >
-      {/* Button strip */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        height: 24,
-        padding: '0 6px',
-        WebkitAppRegion: 'drag' as any,
-      }}>
+    <div style={{
+      background: th.bg,
+      borderRadius: 8,
+      border: `1px solid ${th.border}`,
+      overflow: 'hidden',
+      userSelect: 'none',
+      WebkitAppRegion: 'drag' as any,
+    }}>
+      {/* Button strip: ここだけインタラクティブ（半透明時もクリック・ドラッグ可） */}
+      <div
+        onMouseEnter={() => { if (isTransparent) window.api.setIgnoreMouseEvents(false) }}
+        onMouseLeave={() => { if (isTransparent) window.api.setIgnoreMouseEvents(true) }}
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          height: 24,
+          padding: '0 6px',
+          WebkitAppRegion: 'drag' as any,
+        }}
+      >
         <div style={{
           fontSize: 10,
           color: isStale ? '#e0a12b' : th.textMuted,
