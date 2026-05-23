@@ -7,6 +7,10 @@ on:
 
 permissions:
   contents: write
+  actions: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   tag:
@@ -41,3 +45,9 @@ jobs:
         run: |
           git tag ${{ steps.version.outputs.tag }}
           git push origin ${{ steps.version.outputs.tag }}
+
+      - name: Trigger build & release workflow
+        if: steps.tag_check.outputs.exists == 'false'
+        run: gh workflow run build.yml --ref ${{ steps.version.outputs.tag }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
