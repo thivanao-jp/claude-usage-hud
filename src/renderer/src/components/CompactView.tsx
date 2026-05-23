@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { UsageData, Settings, ExtraUsage, UsageEntry, BetaProvidersData, GeminiModelData } from '../types'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
@@ -65,12 +65,29 @@ function formatUpdatedAt(d: Date | null): string {
 export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onSwitchToDetail, onRefresh }: Props) {
   const t = useT()
   const th = useTheme()
+  const titleBarRef = useRef<HTMLDivElement>(null)
 
-  // 半透明時: マウスが乗っていない間はクリックスルー（背後ウィンドウに操作が届く）
+  // 半透明時: タイトルバー上のみクリック可・ドラッグ可、それ以外はクリックスルー
   const isTransparent = (settings.window.opacity ?? 100) < 100
   useEffect(() => {
-    if (isTransparent) window.api.setIgnoreMouseEvents(true)
-    return () => { window.api.setIgnoreMouseEvents(false) }
+    if (!isTransparent) return
+    window.api.setIgnoreMouseEvents(true)
+    let prevOver = false
+    const onMouseMove = (e: MouseEvent) => {
+      const rect = titleBarRef.current?.getBoundingClientRect()
+      const isOver = !!rect &&
+        e.clientX >= rect.left && e.clientX <= rect.right &&
+        e.clientY >= rect.top  && e.clientY <= rect.bottom
+      if (isOver !== prevOver) {
+        prevOver = isOver
+        window.api.setIgnoreMouseEvents(!isOver)
+      }
+    }
+    document.addEventListener('mousemove', onMouseMove)
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      window.api.setIgnoreMouseEvents(false)
+    }
   }, [isTransparent])
 
   const usageRecord = usage as (Record<string, UsageEntry | null> | null)
@@ -114,12 +131,11 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
       border: `1px solid ${th.border}`,
       overflow: 'hidden',
       userSelect: 'none',
-      WebkitAppRegion: 'drag' as any,
+      WebkitAppRegion: 'no-drag' as any,
     }}>
-      {/* Button strip: ここだけインタラクティブ（半透明時もクリック・ドラッグ可） */}
+      {/* タイトルバー: ここだけドラッグ可。半透明時は mousemove で自動切替 */}
       <div
-        onMouseEnter={() => { if (isTransparent) window.api.setIgnoreMouseEvents(false) }}
-        onMouseLeave={() => { if (isTransparent) window.api.setIgnoreMouseEvents(true) }}
+        ref={titleBarRef}
         style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -156,7 +172,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
           const pacePct = resetsAt ? calcPacePct(resetsAt, item.periodMs, settings.pace) : null
 
           return (
-            <div key={item.key} style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
+            <div key={item.key} style={{ marginBottom: 4, WebkitAppRegion: 'no-drag' as any }}>
               <div
                 style={{
                   position: 'relative',
@@ -223,7 +239,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
                 overflow: 'hidden',
                 marginBottom: 4,
                 background: th.bgBar,
-                WebkitAppRegion: 'drag' as any,
+                WebkitAppRegion: 'no-drag' as any,
               }}
             >
               <div style={{
@@ -251,7 +267,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
           const { date, time, rel } = formatReset(d?.resetDate ?? null, t('timeNow'))
           const pacePct = d?.resetDate ? calcPacePct(d.resetDate, 30 * DAY, settings.pace) : null
           return (
-            <div style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
+            <div style={{ marginBottom: 4, WebkitAppRegion: 'no-drag' as any }}>
               <div style={{ position: 'relative', height: 28, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
                 <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
                 <div style={barTextStyle}>
@@ -288,7 +304,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
             label: string; pct: number; barColor: string
             reset: ReturnType<typeof formatReset>; hasData: boolean; pacePct: number | null
           }) => (
-            <div style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
+            <div style={{ marginBottom: 4, WebkitAppRegion: 'no-drag' as any }}>
               <div style={{ position: 'relative', height: 28, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
                 <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
                 <div style={barTextStyle}>
@@ -325,7 +341,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
             const reset = formatReset(data?.resetTime ?? null, t('timeNow'))
             const pacePct = data?.resetTime ? calcPacePct(data.resetTime, 24 * HOUR, settings.pace) : null
             return (
-              <div style={{ marginBottom: 4, WebkitAppRegion: 'drag' as any }}>
+              <div style={{ marginBottom: 4, WebkitAppRegion: 'no-drag' as any }}>
                 <div style={{ position: 'relative', height: 28, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
                   <div style={{ position: 'absolute', inset: 0, width: `${consumed}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
                   <div style={barTextStyle}>
