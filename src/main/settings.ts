@@ -26,6 +26,7 @@ export interface Settings {
   window: {
     opacity: number        // 10〜100
     alwaysOnTop: boolean
+    clickThrough?: boolean  // バー部分をクリックスルーするか
     compactX?: number
     compactY?: number
     detailX?: number
@@ -72,7 +73,8 @@ const defaultSettings: Settings = {
   },
   window: {
     opacity: 90,
-    alwaysOnTop: true
+    alwaysOnTop: true,
+    clickThrough: true,
   },
   alerts: {},
   pace: {
