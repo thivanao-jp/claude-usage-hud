@@ -215,6 +215,19 @@ export function SettingsView({ onSettingsChange }: Props) {
           onChange={v => upd(p => ({ ...p, window: { ...p.window, alwaysOnTop: v } }))}
           th={th}
         />
+        {(() => {
+          const isOpaque = s.window.opacity >= 100
+          return (
+            <div style={{ marginTop: 4, opacity: isOpaque ? 0.4 : 1 }}>
+              <CheckRow
+                label={t('clickThroughBars')}
+                checked={isOpaque ? false : (s.window.clickThrough ?? true)}
+                onChange={v => { if (!isOpaque) upd(p => ({ ...p, window: { ...p.window, clickThrough: v } })) }}
+                th={th}
+              />
+            </div>
+          )
+        })()}
         <div style={{ marginTop: 8 }}>
           <Label th={th}>{t('opacityLabel', s.window.opacity)}</Label>
           <input

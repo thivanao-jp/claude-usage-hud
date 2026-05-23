@@ -43,6 +43,7 @@ let settingsWindow: BrowserWindow | null = null
 let updateTimer: ReturnType<typeof setInterval> | null = null
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null
 let updateDownloaded = false
+let dragRestoreTimer: ReturnType<typeof setTimeout> | null = null
 
 const claudeWebFetcher = new ClaudeWebFetcher()
 const copilotFetcher = new GitHubCopilotFetcher()
@@ -170,9 +171,28 @@ function createHudWindow(): BrowserWindow {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  // ドラッグ中は不透明化（will-move は macOS のみ・ユーザー操作時のみ発火）
+  // 復元は renderer の mouseup が主系、2 秒フォールバックを副系とする
+  win.on('will-move', () => {
+    const s = loadSettings()
+    if ((s.window.opacity ?? 100) < 100) {
+      if (dragRestoreTimer) { clearTimeout(dragRestoreTimer); dragRestoreTimer = null }
+      win.setOpacity(1.0)
+    }
+  })
+
   win.on('moved', () => {
     const [px, py] = win.getPosition()
-    saveWindowPosition(loadSettings().viewMode, px, py)
+    const s = loadSettings()
+    saveWindowPosition(s.viewMode, px, py)
+    // フォールバック: renderer の mouseup が届かなかった場合に 2 秒後に復元
+    if ((s.window.opacity ?? 100) < 100) {
+      if (dragRestoreTimer) clearTimeout(dragRestoreTimer)
+      dragRestoreTimer = setTimeout(() => {
+        win.setOpacity(loadSettings().window.opacity / 100)
+        dragRestoreTimer = null
+      }, 2000)
+    }
   })
 
   win.on('closed', () => { hudWindow = null })
@@ -509,6 +529,10 @@ ipcMain.handle('install-update', () => quitAndInstall())
 ipcMain.on('set-ignore-mouse-events', (event, ignore: boolean) => {
   const win = BrowserWindow.fromWebContents(event.sender)
   win?.setIgnoreMouseEvents(ignore, { forward: true })
+})
+ipcMain.on('set-window-opacity', (event, opacity: number) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  win?.setOpacity(opacity)
 })
 // Beta providers
 ipcMain.handle('get-beta-data', () => lastBeta)

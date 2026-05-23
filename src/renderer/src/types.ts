@@ -60,6 +60,7 @@ export interface Settings {
   window: {
     opacity: number
     alwaysOnTop: boolean
+    clickThrough?: boolean
     compactX?: number
     compactY?: number
     detailX?: number
@@ -163,6 +164,7 @@ declare global {
       installUpdate: () => Promise<void>
       onUpdateStatus: (cb: (status: UpdateStatus) => void) => () => void
       setIgnoreMouseEvents: (ignore: boolean) => void
+      setWindowOpacity: (opacity: number) => void
       // Beta providers
       getBetaData: () => Promise<BetaProvidersData>
       getCopilotLoginStatus: () => Promise<'logged-in' | 'logged-out' | 'unknown'>
