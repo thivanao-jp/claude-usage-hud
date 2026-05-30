@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DetailView } from './components/DetailView'
 import { CompactView } from './components/CompactView'
+import { UltraCompactView } from './components/UltraCompactView'
 import { SettingsView } from './components/SettingsView'
 import { UsageData, ProfileData, Settings, ViewMode, BetaProvidersData } from './types'
 import { LangContext, useT } from './LangContext'
@@ -43,7 +44,7 @@ function HudApp() {
   const [mode, setMode] = useState<ViewMode>('compact')
   const [lastSuccessAt, setLastSuccessAt] = useState<Date | null>(null)
   const [isStale, setIsStale] = useState(false)
-  const [beta, setBeta] = useState<BetaProvidersData>({ copilot: null, codex: null })
+  const [beta, setBeta] = useState<BetaProvidersData>({ copilot: null, codex: null, gemini: null })
 
   useEffect(() => {
     window.api.getUsage().then(({ usage, profile }) => {
@@ -72,6 +73,17 @@ function HudApp() {
   function switchMode(m: ViewMode) {
     setMode(m)
     window.api.setViewMode(m)
+  }
+
+  if (mode === 'ultra') {
+    return (
+      <UltraCompactView
+        usage={usage}
+        settings={settings}
+        beta={beta}
+        isStale={isStale}
+      />
+    )
   }
 
   if (mode === 'compact') {
