@@ -114,36 +114,45 @@ function getDetailHeight(settings: Settings): number {
   return DETAIL_H_BASE + betaCount * DETAIL_BETA_H
 }
 
-function getUltraHeight(settings: Settings): number {
+function getUltraHeight(settings: Settings, usage?: UsageData | null, beta?: BetaProvidersData | null): number {
   const showFields = settings.tray.showFields ?? {}
   const bp = settings.betaProviders ?? {}
-  const count = [
-    settings.tray.show5h,
-    ...WEEKLY_FIELD_DEFS.map(f => showFields[f.key] ?? false),
-    settings.tray.showExtra,
-    bp.copilot?.enabled ?? false,
-    bp.codex?.enabled ?? false,
-    bp.codex?.enabled ?? false,
-    bp.gemini?.enabled ?? false,
-    bp.gemini?.enabled ?? false,
-  ].filter(Boolean).length || 1
-  // handle + (N bars × 18) - last margin + bottom pad
+  const usageRecord = usage as Record<string, UsageEntry | null> | null | undefined
+  let count = 0
+  if (settings.tray.show5h) count++
+  for (const f of WEEKLY_FIELD_DEFS) {
+    // count only if enabled AND (data not yet loaded OR data present)
+    if ((showFields[f.key] ?? false) && (!usageRecord || usageRecord[f.key] != null)) count++
+  }
+  if (settings.tray.showExtra && (!usage || usage.extra_usage != null)) count++
+  if (bp.copilot?.enabled && (!beta || beta.copilot != null)) count++
+  if (bp.codex?.enabled) {
+    // 5h bar: only when data confirms it exists
+    if (!beta || !beta.codex || beta.codex.fiveHourUtilization != null) count++
+    count++ // 7d bar always present when codex enabled
+  }
+  if (bp.gemini?.enabled) {
+    if (!beta || !beta.gemini || beta.gemini.pro   != null) count++
+    if (!beta || !beta.gemini || beta.gemini.flash != null) count++
+  }
+  count = Math.max(count, 1)
   return ULTRA_HANDLE_H + count * ULTRA_BAR_H - 2 + ULTRA_PAD
 }
 
-function getWindowSize(mode: ViewMode, settings: Settings): { w: number; h: number } {
-  if (mode === 'ultra')   return { w: ULTRA_W, h: getUltraHeight(settings) }
+function getWindowSize(mode: ViewMode, settings: Settings, usage?: UsageData | null, beta?: BetaProvidersData | null): { w: number; h: number } {
+  if (mode === 'ultra')   return { w: ULTRA_W, h: getUltraHeight(settings, usage, beta) }
   if (mode === 'compact') return { w: COMPACT_W, h: getCompactHeight(settings) }
   return { w: DETAIL_W, h: getDetailHeight(settings) }
 }
 
-function getUltraSnapPosition(pos: UltraPosition, w: number, h: number): { x: number; y: number } {
+function getUltraSnapPosition(pos: UltraPosition, w: number): { x: number; y: number } {
   const { x: dx, y: dy, width } = getActiveDisplayBounds()
   const margin = 8
   switch (pos) {
     case 'top-left':   return { x: dx + margin, y: dy + margin }
     case 'top-right':  return { x: dx + width - w - margin, y: dy + margin }
     case 'top-center': return { x: dx + Math.round((width - w) / 2), y: dy + margin }
+    default:           return { x: dx + width - w - margin, y: dy + margin }
   }
 }
 
@@ -157,6 +166,7 @@ function getSavedPosition(mode: ViewMode, settings: Settings): { x: number; y: n
 }
 
 function saveWindowPosition(mode: ViewMode, px: number, py: number): void {
+  if (mode === 'ultra') return  // ultra position is managed by snap, not drag
   const s = loadSettings()
   if (mode === 'compact') {
     s.window.compactX = px
@@ -175,7 +185,7 @@ function createHudWindow(): BrowserWindow {
 
   let pos: { x: number; y: number }
   if (mode === 'ultra') {
-    pos = getUltraSnapPosition(settings.window.ultraPosition ?? 'top-right', w, h)
+    pos = getUltraSnapPosition(settings.window.ultraPosition ?? 'top-right', w)
   } else {
     pos = getSavedPosition(mode, settings) ?? centerOnActiveDisplay(w, h)
   }
@@ -276,7 +286,7 @@ function switchViewMode(mode: ViewMode): void {
 
   let pos: { x: number; y: number }
   if (mode === 'ultra') {
-    pos = getUltraSnapPosition(s.window.ultraPosition ?? 'top-right', w, h)
+    pos = getUltraSnapPosition(s.window.ultraPosition ?? 'top-right', w)
   } else {
     pos = getSavedPosition(mode, s) ?? centerOnActiveDisplay(w, h)
   }
@@ -291,7 +301,7 @@ function setUltraPosition(pos: UltraPosition): void {
   saveSettings(s)
   if (hudWindow && !hudWindow.isDestroyed() && s.viewMode === 'ultra') {
     const { w, h } = getWindowSize('ultra', s)
-    const { x, y } = getUltraSnapPosition(pos, w, h)
+    const { x, y } = getUltraSnapPosition(pos, w)
     hudWindow.setPosition(x, y)
   }
 }
@@ -431,6 +441,14 @@ function openSettingsWindow(): void {
 
 function sendToHud(isStale: boolean): void {
   if (!hudWindow || hudWindow.isDestroyed()) return
+  // Re-snap ultra window after each data update so height reflects actual bar count
+  const s = loadSettings()
+  if (s.viewMode === 'ultra') {
+    const { w, h } = getWindowSize('ultra', s, lastUsage, lastBeta)
+    hudWindow.setSize(w, h)
+    const { x, y } = getUltraSnapPosition(s.window.ultraPosition ?? 'top-right', w)
+    hudWindow.setPosition(x, y)
+  }
   hudWindow.webContents.send('usage-update', {
     usage: lastUsage,
     profile: lastProfile,
@@ -573,6 +591,10 @@ ipcMain.handle('save-settings', (_e, settings: Settings) => {
     hudWindow.setOpacity(s.window.opacity / 100)
     const { w, h } = getWindowSize(s.viewMode, s)
     hudWindow.setSize(w, h)
+    if (s.viewMode === 'ultra') {
+      const { x, y } = getUltraSnapPosition(s.window.ultraPosition ?? 'top-right', w)
+      hudWindow.setPosition(x, y)
+    }
     // 言語変更等を HUD に即時反映
     hudWindow.webContents.send('settings-changed', s)
   }

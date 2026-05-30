@@ -44,7 +44,7 @@ function HudApp() {
   const [mode, setMode] = useState<ViewMode>('compact')
   const [lastSuccessAt, setLastSuccessAt] = useState<Date | null>(null)
   const [isStale, setIsStale] = useState(false)
-  const [beta, setBeta] = useState<BetaProvidersData>({ copilot: null, codex: null })
+  const [beta, setBeta] = useState<BetaProvidersData>({ copilot: null, codex: null, gemini: null })
 
   useEffect(() => {
     window.api.getUsage().then(({ usage, profile }) => {

@@ -34,10 +34,12 @@ function formatRelCompact(iso: string | null): string {
 export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
   const th = useTheme()
 
+  const clickThrough = settings.window.clickThrough ?? true
   useEffect(() => {
+    if (!clickThrough) return
     window.api.setIgnoreMouseEvents(true)
     return () => window.api.setIgnoreMouseEvents(false)
-  }, [])
+  }, [clickThrough])
 
   const usageRecord = usage as (Record<string, UsageEntry | null> | null)
   const showFields = settings.tray.showFields ?? {}
