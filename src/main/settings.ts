@@ -2,7 +2,9 @@ import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 
-export type ViewMode = 'compact' | 'detail'
+export type ViewMode = 'compact' | 'detail' | 'ultra'
+
+export type UltraPosition = 'top-left' | 'top-center' | 'top-right'
 
 export interface Settings {
   token: string
@@ -31,6 +33,7 @@ export interface Settings {
     compactY?: number
     detailX?: number
     detailY?: number
+    ultraPosition?: UltraPosition
   }
   alerts: Record<string, number | undefined> & {
     five_hour?: number

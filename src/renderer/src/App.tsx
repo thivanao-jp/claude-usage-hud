@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DetailView } from './components/DetailView'
 import { CompactView } from './components/CompactView'
+import { UltraCompactView } from './components/UltraCompactView'
 import { SettingsView } from './components/SettingsView'
 import { UsageData, ProfileData, Settings, ViewMode, BetaProvidersData } from './types'
 import { LangContext, useT } from './LangContext'
@@ -72,6 +73,17 @@ function HudApp() {
   function switchMode(m: ViewMode) {
     setMode(m)
     window.api.setViewMode(m)
+  }
+
+  if (mode === 'ultra') {
+    return (
+      <UltraCompactView
+        usage={usage}
+        settings={settings}
+        beta={beta}
+        isStale={isStale}
+      />
+    )
   }
 
   if (mode === 'compact') {
