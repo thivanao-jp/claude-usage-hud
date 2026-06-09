@@ -145,8 +145,16 @@ function getWindowSize(mode: ViewMode, settings: Settings, usage?: UsageData | n
   return { w: DETAIL_W, h: getDetailHeight(settings) }
 }
 
-function getUltraSnapPosition(pos: UltraPosition, w: number): { x: number; y: number } {
-  const { x: dx, y: dy, width } = getActiveDisplayBounds()
+function getUltraSnapPosition(pos: UltraPosition, w: number, existingWin?: BrowserWindow | null): { x: number; y: number } {
+  let bounds: Electron.Rectangle
+  if (existingWin && !existingWin.isDestroyed()) {
+    const [wx, wy] = existingWin.getPosition()
+    const [ww, wh] = existingWin.getSize()
+    bounds = screen.getDisplayNearestPoint({ x: wx + Math.round(ww / 2), y: wy + Math.round(wh / 2) }).workArea
+  } else {
+    bounds = getActiveDisplayBounds()
+  }
+  const { x: dx, y: dy, width } = bounds
   const margin = 8
   switch (pos) {
     case 'top-left':   return { x: dx + margin, y: dy + margin }
@@ -286,7 +294,7 @@ function switchViewMode(mode: ViewMode): void {
 
   let pos: { x: number; y: number }
   if (mode === 'ultra') {
-    pos = getUltraSnapPosition(s.window.ultraPosition ?? 'top-right', w)
+    pos = getUltraSnapPosition(s.window.ultraPosition ?? 'top-right', w, hudWindow)
   } else {
     pos = getSavedPosition(mode, s) ?? centerOnActiveDisplay(w, h)
   }
@@ -301,7 +309,7 @@ function setUltraPosition(pos: UltraPosition): void {
   saveSettings(s)
   if (hudWindow && !hudWindow.isDestroyed() && s.viewMode === 'ultra') {
     const { w, h } = getWindowSize('ultra', s)
-    const { x, y } = getUltraSnapPosition(pos, w)
+    const { x, y } = getUltraSnapPosition(pos, w, hudWindow)
     hudWindow.setPosition(x, y)
   }
 }
@@ -446,7 +454,7 @@ function sendToHud(isStale: boolean): void {
   if (s.viewMode === 'ultra') {
     const { w, h } = getWindowSize('ultra', s, lastUsage, lastBeta)
     hudWindow.setSize(w, h)
-    const { x, y } = getUltraSnapPosition(s.window.ultraPosition ?? 'top-right', w)
+    const { x, y } = getUltraSnapPosition(s.window.ultraPosition ?? 'top-right', w, hudWindow)
     hudWindow.setPosition(x, y)
   }
   hudWindow.webContents.send('usage-update', {
@@ -592,7 +600,7 @@ ipcMain.handle('save-settings', (_e, settings: Settings) => {
     const { w, h } = getWindowSize(s.viewMode, s)
     hudWindow.setSize(w, h)
     if (s.viewMode === 'ultra') {
-      const { x, y } = getUltraSnapPosition(s.window.ultraPosition ?? 'top-right', w)
+      const { x, y } = getUltraSnapPosition(s.window.ultraPosition ?? 'top-right', w, hudWindow)
       hudWindow.setPosition(x, y)
     }
     // 言語変更等を HUD に即時反映
@@ -728,6 +736,7 @@ function startLocalApiServer(): void {
       seven_day: lastUsage?.seven_day ?? null,
       extra_usage: lastUsage?.extra_usage ?? null,
       last_updated: lastSuccessAt?.toISOString() ?? null,
+      beta: lastBeta,
     }))
   })
 

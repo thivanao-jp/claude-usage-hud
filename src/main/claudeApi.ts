@@ -19,11 +19,13 @@ export interface UsageData {
   seven_day: UsageEntry | null
   seven_day_oauth_apps: UsageEntry | null
   seven_day_opus: UsageEntry | null
+  seven_day_fable: UsageEntry | null
   seven_day_sonnet: UsageEntry | null
   seven_day_cowork: UsageEntry | null
   seven_day_omelette: UsageEntry | null
   iguana_necktie: UsageEntry | null
   omelette_promotional: UsageEntry | null
+  cinder_cove: UsageEntry | null
   extra_usage: ExtraUsage | null
 }
 
