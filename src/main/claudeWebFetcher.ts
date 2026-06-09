@@ -321,11 +321,13 @@ function mapUsage(raw: unknown): UsageData | null {
     seven_day: entry(src, 'seven_day'),
     seven_day_oauth_apps: entry(src, 'seven_day_oauth_apps'),
     seven_day_opus: entry(src, 'seven_day_opus'),
+    seven_day_fable: entry(src, 'seven_day_fable'),
     seven_day_sonnet: entry(src, 'seven_day_sonnet'),
     seven_day_cowork: entry(src, 'seven_day_cowork'),
     seven_day_omelette: entry(src, 'seven_day_omelette'),
     iguana_necktie: entry(src, 'iguana_necktie'),
     omelette_promotional: entry(src, 'omelette_promotional'),
+    cinder_cove: entry(src, 'cinder_cove'),
     extra_usage,
   }
 
