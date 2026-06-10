@@ -24,7 +24,7 @@ import { GitHubCopilotFetcher } from './githubCopilotFetcher'
 import { CodexFetcher } from './codexFetcher'
 import { GeminiFetcher } from './geminiFetcher'
 import { createBarIcon } from './trayIcon'
-import { pollCcUsage, getCcPaceData, CcPaceData } from './ccPaceMeter'
+import { pollCcUsage, getCcPaceData, getBootstrapEstimate, CcPaceData, HistoryPoint, BOOTSTRAP_LOOKBACK_MS } from './ccPaceMeter'
 
 // stdoutがバッファリングされることがあるため、ログは直接ファイルに書き込む
 // app.getPath('logs') はプラットフォームに応じた適切なディレクトリを返す
@@ -55,7 +55,7 @@ let lastUsage: UsageData | null = null
 let lastProfile: ProfileData | null = null
 let lastSuccessAt: Date | null = null
 let lastBeta: BetaProvidersData = { copilot: null, codex: null, gemini: null }
-let lastCcPace: CcPaceData = { available: false, paceTokensInBlock: null, burnRatePerMin: null, burnRateCostPerMin: null, minutesToLimit: null, minutesToReset: null, estimatedLimitTokens: null, estimatedLimitUsd: null, calibratedNow: false }
+let lastCcPace: CcPaceData = { available: false, paceTokensInBlock: null, burnRatePerMin: null, burnRateCostPerMin: null, minutesToLimit: null, minutesToReset: null, estimatedLimitTokens: null, estimatedLimitUsd: null, calibratedNow: false, sampleCount: 0 }
 let ccPaceTimer: ReturnType<typeof setInterval> | null = null
 
 // ---- Display Helper ----
@@ -478,19 +478,53 @@ function sendToHud(isStale: boolean): void {
   })
 }
 
+let ccPaceBootstrapAttempted = false
+
 function updateCcPace(): void {
-  pollCcUsage()
   const settings = loadSettings()
+
+  // 初回起動時: 過去のJSONL+利用履歴からまとめてキャリブレーションのタネを作る
+  if (!ccPaceBootstrapAttempted && !settings.ccPaceCalibration) {
+    const resetsAt = lastUsage?.five_hour?.resets_at
+    if (resetsAt) {
+      pollCcUsage(BOOTSTRAP_LOOKBACK_MS)
+      const history: HistoryPoint[] = getUsageHistory(2)
+        .filter(r => r.five_hour != null)
+        .map(r => ({
+          recordedAt: new Date(r.recorded_at.replace(' ', 'T') + 'Z').getTime(),
+          fiveHour: r.five_hour,
+        }))
+      const bootstrap = getBootstrapEstimate(history, resetsAt)
+      log('cc-pace bootstrap:', bootstrap)
+      if (bootstrap.sampleCount > 0 && bootstrap.estimatedLimitTokens != null) {
+        settings.ccPaceCalibration = {
+          estimatedLimitTokens: bootstrap.estimatedLimitTokens,
+          estimatedLimitUsd: bootstrap.estimatedLimitUsd ?? undefined,
+          sampleCount: bootstrap.sampleCount,
+          updatedAt: new Date().toISOString(),
+        }
+        saveSettings(settings)
+      }
+      ccPaceBootstrapAttempted = true
+    }
+  } else {
+    pollCcUsage()
+  }
+
   lastCcPace = getCcPaceData(
     lastUsage?.five_hour?.utilization ?? null,
     lastUsage?.five_hour?.resets_at ?? null,
     settings.ccPaceCalibration?.estimatedLimitTokens ?? null,
-    settings.ccPaceCalibration?.estimatedLimitUsd ?? null
+    settings.ccPaceCalibration?.estimatedLimitUsd ?? null,
+    settings.ccPaceCalibration?.sampleCount ?? 0,
+    settings.ccPaceCalibration?.lastResetsAt ?? null
   )
   if (lastCcPace.calibratedNow && lastCcPace.estimatedLimitTokens != null) {
     settings.ccPaceCalibration = {
       estimatedLimitTokens: lastCcPace.estimatedLimitTokens,
       estimatedLimitUsd: lastCcPace.estimatedLimitUsd ?? undefined,
+      sampleCount: lastCcPace.sampleCount,
+      lastResetsAt: lastUsage?.five_hour?.resets_at ?? undefined,
       updatedAt: new Date().toISOString(),
     }
     saveSettings(settings)

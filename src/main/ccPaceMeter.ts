@@ -7,9 +7,15 @@ const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
 const PROJECTS_DIR = join(CLAUDE_DIR, 'projects')
 
 const FIVE_HOURS_MS = 5 * 60 * 60 * 1000
-const LOOKBACK_MS = 6 * 60 * 60 * 1000   // ファイルを追跡対象にする最大の古さ
+const LOOKBACK_MS = 6 * 60 * 60 * 1000   // 通常ポーリングでファイルを追跡対象にする最大の古さ
 const RECENT_WINDOW_MS = 15 * 60 * 1000  // 直近バーンレート算出ウィンドウ
 const MAX_INITIAL_READ = 2 * 1024 * 1024 // 新規追跡ファイルは末尾2MBのみ初期読み込み
+
+// ブートストラップ（初回キャリブレーション）用: より長い期間のJSONLを一度だけ読み込む
+export const BOOTSTRAP_LOOKBACK_MS = 24 * 60 * 60 * 1000
+const BOOTSTRAP_MAX_INITIAL_READ = 16 * 1024 * 1024
+const BOOTSTRAP_MAX_BLOCKS = 4 // 過去何ブロック分まで遡ってサンプル化するか
+const MAX_RECORD_GAP_MS = 60 * 60 * 1000 // usage_history のレコードがブロック境界からこれ以上離れていたら使わない
 
 export interface CcPaceData {
   available: boolean
@@ -27,6 +33,19 @@ export interface CcPaceData {
   estimatedLimitUsd: number | null
   /** 今回のブロックで新たにキャリブレーションできたか（true なら永続化推奨） */
   calibratedNow: boolean
+  /** キャリブレーションに使われたブロック数（EMAのウォームアップに使用） */
+  sampleCount: number
+}
+
+export interface HistoryPoint {
+  recordedAt: number       // epoch ms
+  fiveHour: number | null  // utilization%
+}
+
+export interface BootstrapResult {
+  estimatedLimitTokens: number | null
+  estimatedLimitUsd: number | null
+  sampleCount: number
 }
 
 const MIN_UTIL_FOR_CALIBRATION = 5 // % 未満は逆算値が不安定なので信頼しない
@@ -49,6 +68,7 @@ interface FileState {
 const fileStates = new Map<string, FileState>()
 const seenKeys = new Set<string>()
 let events: UsageEvent[] = []
+let trackedLookbackMs = LOOKBACK_MS
 
 function walkJsonlFiles(dir: string, out: string[]): void {
   let entries
@@ -100,7 +120,7 @@ function parseLine(line: string): void {
   })
 }
 
-function pollFile(path: string): void {
+function pollFile(path: string, lookbackMs: number, initialReadCap: number): void {
   let st
   try {
     st = statSync(path)
@@ -111,14 +131,14 @@ function pollFile(path: string): void {
   const known = fileStates.get(path)
 
   // 未追跡ファイルは、最近更新されたものだけを対象にする
-  if (!known && Date.now() - st.mtimeMs > LOOKBACK_MS) return
+  if (!known && Date.now() - st.mtimeMs > lookbackMs) return
   if (known && known.mtimeMs === st.mtimeMs && known.offset === st.size) return
 
-  const startOffset = known?.offset ?? Math.max(0, st.size - MAX_INITIAL_READ)
+  const startOffset = known?.offset ?? Math.max(0, st.size - initialReadCap)
   if (st.size < startOffset) {
     // ファイルが縮小（ローテート等）された場合は読み直し
     fileStates.delete(path)
-    return pollFile(path)
+    return pollFile(path, lookbackMs, initialReadCap)
   }
   const len = st.size - startOffset
   if (len <= 0) {
@@ -146,13 +166,20 @@ function pollFile(path: string): void {
   fileStates.set(path, { offset: st.size, mtimeMs: st.mtimeMs, partial: incomplete })
 }
 
-/** JSONLファイルをポーリングし、新規イベントを取り込む */
-export function pollCcUsage(): void {
+/**
+ * JSONLファイルをポーリングし、新規イベントを取り込む。
+ * @param lookbackMs 通常は LOOKBACK_MS（6h）。ブートストラップ時のみ大きい値を渡し、
+ *                   一度だけ広い範囲のファイルを読み込む（以後も保持される）。
+ */
+export function pollCcUsage(lookbackMs: number = LOOKBACK_MS): void {
+  trackedLookbackMs = Math.max(trackedLookbackMs, lookbackMs)
+  const initialReadCap = lookbackMs > LOOKBACK_MS ? BOOTSTRAP_MAX_INITIAL_READ : MAX_INITIAL_READ
+
   const files: string[] = []
   walkJsonlFiles(PROJECTS_DIR, files)
-  for (const f of files) pollFile(f)
+  for (const f of files) pollFile(f, lookbackMs, initialReadCap)
 
-  const cutoff = Date.now() - LOOKBACK_MS
+  const cutoff = Date.now() - trackedLookbackMs
   events = events.filter(e => e.timestamp >= cutoff)
 
   // seenKeys が際限なく増えないよう、定期的にクリア
@@ -165,17 +192,75 @@ function blendEma(fallback: number | null, current: number, alpha: number): numb
 }
 
 /**
+ * 過去の usage_history（5h枠利用率の定期スナップショット）とJSONLのトークン蓄積を
+ * 突き合わせ、過去 BOOTSTRAP_MAX_BLOCKS ブロック分の「推定上限」サンプルを作る。
+ * 初回起動時（ccPaceCalibration が無いとき）に呼び出し、即座に妥当な初期値を得るために使う。
+ *
+ * 前提: 5h枠は resetsAt を起点に5時間ごとに区切られていると仮定し、各ブロック終了時刻に
+ * 最も近い（直前の）usage_history レコードの utilization を「そのブロックでの累積使用率」とみなす。
+ */
+export function getBootstrapEstimate(usageHistory: HistoryPoint[], resetsAtIso: string): BootstrapResult {
+  const empty: BootstrapResult = { estimatedLimitTokens: null, estimatedLimitUsd: null, sampleCount: 0 }
+
+  const resetsAt = new Date(resetsAtIso).getTime()
+  if (!Number.isFinite(resetsAt)) return empty
+  if (events.length === 0) return empty
+
+  const tokenSamples: number[] = []
+  const usdSamples: number[] = []
+
+  for (let n = 1; n <= BOOTSTRAP_MAX_BLOCKS; n++) {
+    const blockEnd = resetsAt - n * FIVE_HOURS_MS
+    const blockStart = blockEnd - FIVE_HOURS_MS
+
+    // blockEnd 時点（直前）に最も近い usage_history レコードを探す
+    let closest: HistoryPoint | null = null
+    for (const row of usageHistory) {
+      if (row.fiveHour == null) continue
+      if (row.recordedAt > blockEnd) continue
+      if (!closest || row.recordedAt > closest.recordedAt) closest = row
+    }
+    if (!closest) continue
+    if (blockEnd - closest.recordedAt > MAX_RECORD_GAP_MS) continue
+
+    const utilization = closest.fiveHour as number
+    if (utilization <= MIN_UTIL_FOR_CALIBRATION) continue
+
+    const blockEvents = events.filter(e => e.timestamp >= blockStart && e.timestamp <= blockEnd)
+    const tokens = blockEvents.reduce((sum, e) => sum + e.paceTokens, 0)
+    const usd = blockEvents.reduce((sum, e) => sum + e.paceCostUsd, 0)
+    if (tokens <= 0) continue
+
+    tokenSamples.push((tokens / utilization) * 100)
+    if (usd > 0) usdSamples.push((usd / utilization) * 100)
+  }
+
+  const avg = (arr: number[]): number | null =>
+    arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : null
+
+  return {
+    estimatedLimitTokens: avg(tokenSamples),
+    estimatedLimitUsd: avg(usdSamples),
+    sampleCount: tokenSamples.length,
+  }
+}
+
+/**
  * 5h枠の利用状況を元に、現在のバーンレートと着地予測を計算する。
  * @param fiveHourUtilization API由来の現在の5h枠使用率（%）
  * @param resetsAtIso API由来の5h枠リセット時刻（ISO文字列）
  * @param fallbackLimitTokens 過去にキャリブレーションした推定トークン上限（フォールバック）
  * @param fallbackLimitUsd 過去にキャリブレーションした推定コスト上限（$、フォールバック）
+ * @param fallbackSampleCount これまでにクロスブロックでブレンドした回数（EMAウォームアップ用）
+ * @param fallbackLastResetsAt 前回クロスブロックでブレンドした際の resetsAt（ブロック切り替え検知用）
  */
 export function getCcPaceData(
   fiveHourUtilization: number | null,
   resetsAtIso: string | null,
   fallbackLimitTokens: number | null = null,
-  fallbackLimitUsd: number | null = null
+  fallbackLimitUsd: number | null = null,
+  fallbackSampleCount = 0,
+  fallbackLastResetsAt: string | null = null
 ): CcPaceData {
   const empty: CcPaceData = {
     available: events.length > 0,
@@ -187,6 +272,7 @@ export function getCcPaceData(
     estimatedLimitTokens: fallbackLimitTokens,
     estimatedLimitUsd: fallbackLimitUsd,
     calibratedNow: false,
+    sampleCount: fallbackSampleCount,
   }
   if (events.length === 0) return empty
   if (!resetsAtIso) return empty
@@ -217,15 +303,34 @@ export function getCcPaceData(
   let estimatedLimitTokens = fallbackLimitTokens
   let estimatedLimitUsd = fallbackLimitUsd
   let calibratedNow = false
-  if (fiveHourUtilization != null && fiveHourUtilization > MIN_UTIL_FOR_CALIBRATION && paceTokensInBlock > 0) {
-    // utilization% が高いほど信頼度が高いとみなし、EMAの追従速度を上げる
-    const alpha = Math.min(EMA_ALPHA_MAX, Math.max(EMA_ALPHA_MIN, fiveHourUtilization / 100))
-    const currentEstimateTokens = (paceTokensInBlock / fiveHourUtilization) * 100
-    estimatedLimitTokens = blendEma(fallbackLimitTokens, currentEstimateTokens, alpha)
+  let sampleCount = fallbackSampleCount
 
-    if (paceCostUsdInBlock > 0) {
-      const currentEstimateUsd = (paceCostUsdInBlock / fiveHourUtilization) * 100
-      estimatedLimitUsd = blendEma(fallbackLimitUsd, currentEstimateUsd, alpha)
+  if (fiveHourUtilization != null && fiveHourUtilization > MIN_UTIL_FOR_CALIBRATION && paceTokensInBlock > 0) {
+    const currentEstimateTokens = (paceTokensInBlock / fiveHourUtilization) * 100
+    const currentEstimateUsd = paceCostUsdInBlock > 0 ? (paceCostUsdInBlock / fiveHourUtilization) * 100 : null
+
+    if (fallbackLimitTokens == null) {
+      // 初回（ブートストラップ未実施 or 失敗）: そのまま採用
+      estimatedLimitTokens = currentEstimateTokens
+      estimatedLimitUsd = currentEstimateUsd
+      sampleCount = 1
+    } else {
+      const isNewBlock = fallbackLastResetsAt !== resetsAtIso
+      const utilAlpha = Math.min(EMA_ALPHA_MAX, Math.max(EMA_ALPHA_MIN, fiveHourUtilization / 100))
+      let alpha: number
+      if (isNewBlock) {
+        // ブロック跨ぎ: サンプル数に応じたウォームアップ係数（1/(n+1)）と utilization 係数の小さい方を採用
+        const warmupAlpha = 1 / (fallbackSampleCount + 1)
+        alpha = Math.min(EMA_ALPHA_MAX, Math.max(EMA_ALPHA_MIN, Math.min(utilAlpha, warmupAlpha)))
+        sampleCount = fallbackSampleCount + 1
+      } else {
+        // 同一ブロック内: そのブロックの比率へ素早く収束させる
+        alpha = utilAlpha
+      }
+      estimatedLimitTokens = blendEma(fallbackLimitTokens, currentEstimateTokens, alpha)
+      if (currentEstimateUsd != null) {
+        estimatedLimitUsd = blendEma(fallbackLimitUsd, currentEstimateUsd, alpha)
+      }
     }
     calibratedNow = true
   }
@@ -250,5 +355,6 @@ export function getCcPaceData(
     estimatedLimitTokens,
     estimatedLimitUsd,
     calibratedNow,
+    sampleCount,
   }
 }

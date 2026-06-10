@@ -45,7 +45,7 @@ function HudApp() {
   const [lastSuccessAt, setLastSuccessAt] = useState<Date | null>(null)
   const [isStale, setIsStale] = useState(false)
   const [beta, setBeta] = useState<BetaProvidersData>({ copilot: null, codex: null, gemini: null })
-  const [ccPace, setCcPace] = useState<CcPaceData>({ available: false, paceTokensInBlock: null, burnRatePerMin: null, burnRateCostPerMin: null, minutesToLimit: null, minutesToReset: null, estimatedLimitTokens: null, estimatedLimitUsd: null, calibratedNow: false })
+  const [ccPace, setCcPace] = useState<CcPaceData>({ available: false, paceTokensInBlock: null, burnRatePerMin: null, burnRateCostPerMin: null, minutesToLimit: null, minutesToReset: null, estimatedLimitTokens: null, estimatedLimitUsd: null, calibratedNow: false, sampleCount: 0 })
 
   useEffect(() => {
     window.api.getUsage().then(({ usage, profile }) => {
