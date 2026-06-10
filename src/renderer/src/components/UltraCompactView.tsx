@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { UsageData, Settings, UsageEntry, BetaProvidersData } from '../types'
 import { useTheme } from '../ThemeContext'
+import { calcPacePct } from '../paceUtil'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
 
 interface Props {
@@ -10,12 +11,16 @@ interface Props {
   isStale: boolean
 }
 
+const HOUR = 60 * 60 * 1000
+const DAY  = 24 * HOUR
+
 interface BarDef {
   key: string
   label: string
   color: string
   pct: number
   resetAt: string | null
+  periodMs: number | null
 }
 
 function formatRelCompact(iso: string | null): string {
@@ -54,6 +59,7 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
       color: '#4a9eff',
       pct: entry ? Math.min(Math.round(entry.utilization), 100) : 0,
       resetAt: entry?.resets_at ?? null,
+      periodMs: 5 * HOUR,
     })
   }
 
@@ -66,6 +72,7 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
         color: f.color,
         pct: Math.min(Math.round(entry.utilization), 100),
         resetAt: entry.resets_at ?? null,
+        periodMs: f.periodMs,
       })
     }
   }
@@ -78,6 +85,7 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
       color: '#a78bfa',
       pct: Math.min(Math.round(extra.utilization ?? 0), 100),
       resetAt: null,
+      periodMs: null,
     })
   }
 
@@ -89,6 +97,7 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
       color: '#6e9ee8',
       pct: Math.min(Math.round(d.utilization), 100),
       resetAt: d.resetDate ?? null,
+      periodMs: 30 * DAY,
     })
   }
 
@@ -101,6 +110,7 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
         color: '#10a37f',
         pct: Math.min(Math.round(d.fiveHourUtilization), 100),
         resetAt: d.fiveHourResetDate ?? null,
+        periodMs: 5 * HOUR,
       })
     }
     barDefs.push({
@@ -109,6 +119,7 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
       color: '#10a37f',
       pct: Math.min(Math.round(d.utilization), 100),
       resetAt: d.resetDate ?? null,
+      periodMs: 7 * DAY,
     })
   }
 
@@ -121,6 +132,7 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
         color: '#4285f4',
         pct: Math.min(Math.round(100 - g.pro.remainingPct), 100),
         resetAt: g.pro.resetTime ?? null,
+        periodMs: 24 * HOUR,
       })
     }
     if (g.flash) {
@@ -130,6 +142,7 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
         color: '#4285f4',
         pct: Math.min(Math.round(100 - g.flash.remainingPct), 100),
         resetAt: g.flash.resetTime ?? null,
+        periodMs: 24 * HOUR,
       })
     }
   }
@@ -142,6 +155,7 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
       color: '#4a9eff',
       pct: entry ? Math.min(Math.round(entry.utilization), 100) : 0,
       resetAt: entry?.resets_at ?? null,
+      periodMs: 5 * HOUR,
     })
   }
 
@@ -175,6 +189,9 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
           const barColor = item.pct >= 90 ? '#e05a2b' : item.pct >= 70 ? '#e0a12b' : item.color
           const rel = formatRelCompact(item.resetAt)
           const isLast = i === barDefs.length - 1
+          const pacePct = (item.resetAt && item.periodMs)
+            ? calcPacePct(item.resetAt, item.periodMs, settings.pace)
+            : null
           return (
             <div
               key={item.key}
@@ -195,6 +212,19 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
                 borderRadius: 3,
                 transition: 'width 0.4s ease',
               }} />
+              {pacePct != null && (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  bottom: 0,
+                  left: `${pacePct}%`,
+                  width: 2,
+                  marginLeft: -1,
+                  background: 'rgba(255,255,255,0.7)',
+                  boxShadow: '0 0 2px rgba(0,0,0,0.8)',
+                  transition: 'left 0.4s ease',
+                }} />
+              )}
               <div style={textStyle}>
                 <span style={{ width: 24, flexShrink: 0 }}>{item.label}</span>
                 <span style={{ flex: 1 }} />
