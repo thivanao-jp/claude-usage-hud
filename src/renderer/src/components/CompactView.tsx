@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { UsageData, Settings, ExtraUsage, UsageEntry, BetaProvidersData, GeminiModelData } from '../types'
+import { UsageData, Settings, ExtraUsage, UsageEntry, BetaProvidersData, GeminiModelData, CcPaceData } from '../types'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { calcPacePct } from '../paceUtil'
@@ -11,8 +11,23 @@ interface Props {
   beta?: BetaProvidersData
   lastSuccessAt: Date | null
   isStale: boolean
+  ccPace?: CcPaceData
   onSwitchToDetail: () => void
   onRefresh: () => void
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
+  return String(Math.round(n))
+}
+
+function formatMinutes(min: number): string {
+  const totalMin = Math.max(0, Math.round(min))
+  const hours = Math.floor(totalMin / 60)
+  const mins = totalMin % 60
+  if (hours > 0) return mins > 0 ? `${hours}h${mins}m` : `${hours}h`
+  return `${mins}m`
 }
 
 interface BarItem {
@@ -62,7 +77,7 @@ function formatUpdatedAt(d: Date | null): string {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onSwitchToDetail, onRefresh }: Props) {
+export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccPace, onSwitchToDetail, onRefresh }: Props) {
   const t = useT()
   const th = useTheme()
   const titleBarRef = useRef<HTMLDivElement>(null)
@@ -228,6 +243,24 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, onS
                     opacity: 0.5,
                     transition: 'width 0.4s ease',
                   }} />
+                </div>
+              )}
+              {item.key === 'five_hour' && ccPace?.available && ccPace.burnRatePerMin != null && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: th.textMuted, marginTop: 2, padding: '0 1px' }}>
+                  <span>
+                    🔥 {t('ccPaceBurnRate', formatTokens(ccPace.burnRatePerMin))}
+                    {ccPace.estimatedLimitTokens != null && (
+                      <> {t('ccPaceLimitEst', formatTokens(ccPace.estimatedLimitTokens))}</>
+                    )}
+                  </span>
+                  {ccPace.minutesToLimit != null && (
+                    <span style={{
+                      color: (ccPace.minutesToReset != null && ccPace.minutesToLimit < ccPace.minutesToReset)
+                        ? '#e05a2b' : th.textMuted
+                    }}>
+                      {t('ccPaceRange', formatMinutes(ccPace.minutesToLimit))}
+                    </span>
+                  )}
                 </div>
               )}
             </div>

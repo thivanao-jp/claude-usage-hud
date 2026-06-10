@@ -45,7 +45,7 @@ function HudApp() {
   const [lastSuccessAt, setLastSuccessAt] = useState<Date | null>(null)
   const [isStale, setIsStale] = useState(false)
   const [beta, setBeta] = useState<BetaProvidersData>({ copilot: null, codex: null, gemini: null })
-  const [ccPace, setCcPace] = useState<CcPaceData>({ available: false, paceTokensInBlock: null, burnRatePerMin: null, minutesToLimit: null, minutesToReset: null })
+  const [ccPace, setCcPace] = useState<CcPaceData>({ available: false, paceTokensInBlock: null, burnRatePerMin: null, minutesToLimit: null, minutesToReset: null, estimatedLimitTokens: null, calibratedNow: false })
 
   useEffect(() => {
     window.api.getUsage().then(({ usage, profile }) => {
@@ -85,6 +85,7 @@ function HudApp() {
         settings={settings}
         beta={beta}
         isStale={isStale}
+        ccPace={ccPace}
       />
     )
   }
@@ -97,6 +98,7 @@ function HudApp() {
         beta={beta}
         lastSuccessAt={lastSuccessAt}
         isStale={isStale}
+        ccPace={ccPace}
         onRefresh={() => window.api.refresh()}
         onSwitchToDetail={() => switchMode('detail')}
       />

@@ -15,6 +15,7 @@ interface Props {
 }
 
 function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
   return String(Math.round(n))
 }
@@ -120,10 +121,18 @@ export function UsageCard({ label, description, entry, color, highlight, periodM
 
       {ccPace?.available && ccPace.burnRatePerMin != null && (
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: th.textMuted, marginTop: 3 }}>
-          <span>🔥 {t('ccPaceBurnRate', formatTokens(ccPace.burnRatePerMin))}</span>
-          {ccPace.minutesToLimit != null && ccPace.minutesToReset != null && ccPace.minutesToLimit < ccPace.minutesToReset && (
-            <span style={{ color: '#e05a2b' }}>
-              {t('ccPaceLimitWarning', formatMinutes(ccPace.minutesToLimit))}
+          <span>
+            🔥 {t('ccPaceBurnRate', formatTokens(ccPace.burnRatePerMin))}
+            {ccPace.estimatedLimitTokens != null && (
+              <> {t('ccPaceLimitEst', formatTokens(ccPace.estimatedLimitTokens))}</>
+            )}
+          </span>
+          {ccPace.minutesToLimit != null && (
+            <span style={{
+              color: (ccPace.minutesToReset != null && ccPace.minutesToLimit < ccPace.minutesToReset)
+                ? '#e05a2b' : th.textMuted
+            }}>
+              {t('ccPaceRange', formatMinutes(ccPace.minutesToLimit))}
             </span>
           )}
         </div>

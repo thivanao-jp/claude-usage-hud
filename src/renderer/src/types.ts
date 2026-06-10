@@ -132,6 +132,8 @@ export interface CcPaceData {
   burnRatePerMin: number | null
   minutesToLimit: number | null
   minutesToReset: number | null
+  estimatedLimitTokens: number | null
+  calibratedNow: boolean
 }
 
 export interface HistoryRow {
