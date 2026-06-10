@@ -1,35 +1,40 @@
 /**
  * Claude モデルのトークン単価テーブル（$ per token）。
- * 前方一致でモデル名にマッチさせる（例: "claude-sonnet-4-5-20250929" → "claude-sonnet-4"）。
- * 未知のモデル（例: 将来の Fable 系）は null を返し、コスト寄与は 0 として扱う。
+ * 前方一致でモデル名にマッチさせる（例: "claude-sonnet-4-5-20250929" → "claude-sonnet-4-5"）。
+ * 価格データは modelPricing.json（LiteLLM の model_prices_and_context_window.json から抽出した
+ * スナップショット）を読み込む。未知のモデル（例: 将来の新モデル）は null を返し、コスト寄与は 0 として扱う。
  */
+import pricingData from './modelPricing.json'
 
 export interface ModelPrice {
   input: number   // $ per token (base input)
   output: number  // $ per token (output)
+  cacheWrite5m: number // $ per token (5分キャッシュ書き込み)
+  cacheWrite1h: number // $ per token (1時間キャッシュ書き込み)
+  cacheRead: number    // $ per token (キャッシュ読み込み)
 }
 
-// キャッシュ書き込み・読み込みは base input price からの倍率（Anthropic標準）
-export const CACHE_WRITE_5M_MULT = 1.25
-export const CACHE_WRITE_1H_MULT = 2.0
-export const CACHE_READ_MULT = 0.1
+interface RawPrice {
+  in: number
+  out: number
+  cw5m: number
+  cw1h: number
+  cr: number
+}
 
-const PRICING: { prefix: string; price: ModelPrice }[] = [
-  // Opus 系: $15 / $75 per MTok
-  { prefix: 'claude-opus-4', price: { input: 15e-6, output: 75e-6 } },
-  { prefix: 'claude-3-opus', price: { input: 15e-6, output: 75e-6 } },
-  // Sonnet 系: $3 / $15 per MTok
-  { prefix: 'claude-sonnet-4', price: { input: 3e-6, output: 15e-6 } },
-  { prefix: 'claude-3-7-sonnet', price: { input: 3e-6, output: 15e-6 } },
-  { prefix: 'claude-3-5-sonnet', price: { input: 3e-6, output: 15e-6 } },
-  { prefix: 'claude-3-sonnet', price: { input: 3e-6, output: 15e-6 } },
-  // Haiku 4.5: $1 / $5 per MTok
-  { prefix: 'claude-haiku-4', price: { input: 1e-6, output: 5e-6 } },
-  // Haiku 3.5: $0.80 / $4 per MTok
-  { prefix: 'claude-3-5-haiku', price: { input: 0.8e-6, output: 4e-6 } },
-  // Haiku 3: $0.25 / $1.25 per MTok
-  { prefix: 'claude-3-haiku', price: { input: 0.25e-6, output: 1.25e-6 } },
-]
+// 前方一致の優先順位を保つため、JSON内のキー順をそのまま利用する
+const PRICING: { prefix: string; price: ModelPrice }[] = Object.entries(
+  (pricingData as { models: Record<string, RawPrice> }).models
+).map(([prefix, p]) => ({
+  prefix,
+  price: {
+    input: p.in,
+    output: p.out,
+    cacheWrite5m: p.cw5m,
+    cacheWrite1h: p.cw1h,
+    cacheRead: p.cr,
+  },
+}))
 
 /** モデル名から単価を取得。未知モデルは null（コスト0扱い） */
 export function getModelPrice(model: string | undefined | null): ModelPrice | null {
@@ -63,6 +68,6 @@ export function calcPaceCostUsd(usage: Record<string, unknown>, model: string | 
 
   return inputTokens * price.input
     + outputTokens * price.output
-    + ephemeral5m * price.input * CACHE_WRITE_5M_MULT
-    + ephemeral1h * price.input * CACHE_WRITE_1H_MULT
+    + ephemeral5m * price.cacheWrite5m
+    + ephemeral1h * price.cacheWrite1h
 }
