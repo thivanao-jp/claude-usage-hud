@@ -54,6 +54,10 @@ export interface Settings {
   ccPaceCalibration?: {
     estimatedLimitTokens: number
     estimatedLimitUsd?: number
+    /** クロスブロックでブレンドした回数（ブートストラップ分含む、EMAウォームアップ用） */
+    sampleCount?: number
+    /** 直近のクロスブロック更新で使用した resetsAt（ブロック切り替え検知用） */
+    lastResetsAt?: string
     updatedAt: string
   }
 }

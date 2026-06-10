@@ -136,6 +136,7 @@ export interface CcPaceData {
   estimatedLimitTokens: number | null
   estimatedLimitUsd: number | null
   calibratedNow: boolean
+  sampleCount: number
 }
 
 export interface HistoryRow {
