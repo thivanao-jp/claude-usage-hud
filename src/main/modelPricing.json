@@ -1,0 +1,128 @@
+{
+  "_meta": {
+    "source": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
+    "fetchedAt": "2026-06-11",
+    "note": "前方一致でモデル名とマッチ。各値は $ per token。cw1h が無い旧モデルは cw5m * 1.6 を概算値として使用。"
+  },
+  "models": {
+    "claude-opus-4-1": {
+      "in": 1.5e-05,
+      "out": 7.5e-05,
+      "cw5m": 1.875e-05,
+      "cw1h": 3e-05,
+      "cr": 1.5e-06
+    },
+    "claude-opus-4-8": {
+      "in": 5e-06,
+      "out": 2.5e-05,
+      "cw5m": 6.25e-06,
+      "cw1h": 1e-05,
+      "cr": 5e-07
+    },
+    "claude-opus-4-7": {
+      "in": 5e-06,
+      "out": 2.5e-05,
+      "cw5m": 6.25e-06,
+      "cw1h": 1e-05,
+      "cr": 5e-07
+    },
+    "claude-opus-4-6": {
+      "in": 5e-06,
+      "out": 2.5e-05,
+      "cw5m": 6.25e-06,
+      "cw1h": 1e-05,
+      "cr": 5e-07
+    },
+    "claude-opus-4-5": {
+      "in": 5e-06,
+      "out": 2.5e-05,
+      "cw5m": 6.25e-06,
+      "cw1h": 1e-05,
+      "cr": 5e-07
+    },
+    "claude-opus-4": {
+      "in": 1.5e-05,
+      "out": 7.5e-05,
+      "cw5m": 1.875e-05,
+      "cw1h": 3e-05,
+      "cr": 1.5e-06
+    },
+    "claude-3-opus": {
+      "in": 1.5e-05,
+      "out": 7.5e-05,
+      "cw5m": 1.875e-05,
+      "cw1h": 3e-05,
+      "cr": 1.5e-06
+    },
+    "claude-fable-5": {
+      "in": 1e-05,
+      "out": 5e-05,
+      "cw5m": 1.25e-05,
+      "cw1h": 2e-05,
+      "cr": 1e-06
+    },
+    "claude-sonnet-4-6": {
+      "in": 3e-06,
+      "out": 1.5e-05,
+      "cw5m": 3.75e-06,
+      "cw1h": 6e-06,
+      "cr": 3e-07
+    },
+    "claude-sonnet-4-5": {
+      "in": 3e-06,
+      "out": 1.5e-05,
+      "cw5m": 3.75e-06,
+      "cw1h": 6e-06,
+      "cr": 3e-07
+    },
+    "claude-sonnet-4": {
+      "in": 3e-06,
+      "out": 1.5e-05,
+      "cw5m": 3.75e-06,
+      "cw1h": 6e-06,
+      "cr": 3e-07
+    },
+    "claude-3-7-sonnet": {
+      "in": 3e-06,
+      "out": 1.5e-05,
+      "cw5m": 3.75e-06,
+      "cw1h": 6e-06,
+      "cr": 3e-07
+    },
+    "claude-3-5-sonnet": {
+      "in": 3e-06,
+      "out": 1.5e-05,
+      "cw5m": 3.75e-06,
+      "cw1h": 6e-06,
+      "cr": 3e-07
+    },
+    "claude-3-sonnet": {
+      "in": 3e-06,
+      "out": 1.5e-05,
+      "cw5m": 3.75e-06,
+      "cw1h": 6e-06,
+      "cr": 3e-07
+    },
+    "claude-haiku-4-5": {
+      "in": 1e-06,
+      "out": 5e-06,
+      "cw5m": 1.25e-06,
+      "cw1h": 2e-06,
+      "cr": 1e-07
+    },
+    "claude-3-5-haiku": {
+      "in": 8e-07,
+      "out": 4e-06,
+      "cw5m": 1e-06,
+      "cw1h": 1.6e-06,
+      "cr": 8e-08
+    },
+    "claude-3-haiku": {
+      "in": 2.5e-07,
+      "out": 1.25e-06,
+      "cw5m": 3e-07,
+      "cw1h": 4.8e-07,
+      "cr": 3e-08
+    }
+  }
+}

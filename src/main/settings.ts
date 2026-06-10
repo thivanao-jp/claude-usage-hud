@@ -50,9 +50,10 @@ export interface Settings {
     codex?: { enabled: boolean }
     gemini?: { enabled: boolean }
   }
-  /** cc-pace-meter: 5h枠の推定トークン上限のキャリブレーション結果（直近の信頼できる値を永続化） */
+  /** cc-pace-meter: 5h枠の推定上限のキャリブレーション結果（直近の信頼できる値を永続化） */
   ccPaceCalibration?: {
     estimatedLimitTokens: number
+    estimatedLimitUsd?: number
     updatedAt: string
   }
 }
