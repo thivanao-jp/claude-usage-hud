@@ -1,6 +1,7 @@
 import { homedir } from 'os'
 import { join } from 'path'
 import { readdirSync, statSync, openSync, readSync, closeSync } from 'fs'
+import { calcPaceCostUsd } from './modelPricing'
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
 const PROJECTS_DIR = join(CLAUDE_DIR, 'projects')
@@ -14,12 +15,16 @@ export interface CcPaceData {
   available: boolean
   paceTokensInBlock: number | null
   burnRatePerMin: number | null
-  /** このペースが続いた場合に utilization が 100% に到達するまでの分数（既に100%以上なら0） */
+  /** 直近の消費コスト（$/分） */
+  burnRateCostPerMin: number | null
+  /** このペースが続いた場合に推定上限（$）に到達するまでの分数（既に到達済みなら0） */
   minutesToLimit: number | null
   /** 5h枠リセットまでの残り分数 */
   minutesToReset: number | null
   /** utilization% から逆算した5h枠の推定トークン上限（100%相当のトークン数） */
   estimatedLimitTokens: number | null
+  /** utilization% から逆算した5h枠の推定コスト上限（$、100%相当） */
+  estimatedLimitUsd: number | null
   /** 今回のブロックで新たにキャリブレーションできたか（true なら永続化推奨） */
   calibratedNow: boolean
 }
@@ -32,6 +37,7 @@ const EMA_ALPHA_MAX = 0.3
 interface UsageEvent {
   timestamp: number
   paceTokens: number
+  paceCostUsd: number
 }
 
 interface FileState {
@@ -85,10 +91,12 @@ function parseLine(line: string): void {
   const inputTokens = Number(usage['input_tokens'] ?? 0)
   const outputTokens = Number(usage['output_tokens'] ?? 0)
   const cacheCreate = Number(usage['cache_creation_input_tokens'] ?? 0)
+  const model = msg?.['model'] as string | undefined
 
   events.push({
     timestamp: ts,
     paceTokens: inputTokens + outputTokens + cacheCreate,
+    paceCostUsd: calcPaceCostUsd(usage, model),
   })
 }
 
@@ -151,24 +159,33 @@ export function pollCcUsage(): void {
   if (seenKeys.size > 50000) seenKeys.clear()
 }
 
+/** EMAでフォールバック値とブレンドする（fallbackがnullなら現在値をそのまま採用） */
+function blendEma(fallback: number | null, current: number, alpha: number): number {
+  return fallback != null ? fallback * (1 - alpha) + current * alpha : current
+}
+
 /**
  * 5h枠の利用状況を元に、現在のバーンレートと着地予測を計算する。
  * @param fiveHourUtilization API由来の現在の5h枠使用率（%）
  * @param resetsAtIso API由来の5h枠リセット時刻（ISO文字列）
- * @param fallbackLimitTokens 過去にキャリブレーションした推定上限（今回算出できない場合のフォールバック）
+ * @param fallbackLimitTokens 過去にキャリブレーションした推定トークン上限（フォールバック）
+ * @param fallbackLimitUsd 過去にキャリブレーションした推定コスト上限（$、フォールバック）
  */
 export function getCcPaceData(
   fiveHourUtilization: number | null,
   resetsAtIso: string | null,
-  fallbackLimitTokens: number | null = null
+  fallbackLimitTokens: number | null = null,
+  fallbackLimitUsd: number | null = null
 ): CcPaceData {
   const empty: CcPaceData = {
     available: events.length > 0,
     paceTokensInBlock: null,
     burnRatePerMin: null,
+    burnRateCostPerMin: null,
     minutesToLimit: null,
     minutesToReset: null,
     estimatedLimitTokens: fallbackLimitTokens,
+    estimatedLimitUsd: fallbackLimitUsd,
     calibratedNow: false,
   }
   if (events.length === 0) return empty
@@ -185,31 +202,40 @@ export function getCcPaceData(
 
   const blockEvents = events.filter(e => e.timestamp >= blockStart && e.timestamp <= now)
   const paceTokensInBlock = blockEvents.reduce((sum, e) => sum + e.paceTokens, 0)
+  const paceCostUsdInBlock = blockEvents.reduce((sum, e) => sum + e.paceCostUsd, 0)
 
   const recentCutoff = now - RECENT_WINDOW_MS
   const recentEvents = blockEvents.filter(e => e.timestamp >= recentCutoff)
   const recentWindowMs = Math.min(elapsedMs, RECENT_WINDOW_MS)
   const recentTokens = recentEvents.reduce((sum, e) => sum + e.paceTokens, 0)
+  const recentCostUsd = recentEvents.reduce((sum, e) => sum + e.paceCostUsd, 0)
   const burnRatePerMin = recentWindowMs > 0 ? (recentTokens / recentWindowMs) * 60000 : null
+  const burnRateCostPerMin = recentWindowMs > 0 ? (recentCostUsd / recentWindowMs) * 60000 : null
 
   const minutesToReset = remainingMs / 60000
 
   let estimatedLimitTokens = fallbackLimitTokens
+  let estimatedLimitUsd = fallbackLimitUsd
   let calibratedNow = false
   if (fiveHourUtilization != null && fiveHourUtilization > MIN_UTIL_FOR_CALIBRATION && paceTokensInBlock > 0) {
-    const currentEstimate = (paceTokensInBlock / fiveHourUtilization) * 100
-    if (fallbackLimitTokens != null) {
-      // utilization% が高いほど信頼度が高いとみなし、EMAの追従速度を上げる
-      const alpha = Math.min(EMA_ALPHA_MAX, Math.max(EMA_ALPHA_MIN, fiveHourUtilization / 100))
-      estimatedLimitTokens = fallbackLimitTokens * (1 - alpha) + currentEstimate * alpha
-    } else {
-      estimatedLimitTokens = currentEstimate
+    // utilization% が高いほど信頼度が高いとみなし、EMAの追従速度を上げる
+    const alpha = Math.min(EMA_ALPHA_MAX, Math.max(EMA_ALPHA_MIN, fiveHourUtilization / 100))
+    const currentEstimateTokens = (paceTokensInBlock / fiveHourUtilization) * 100
+    estimatedLimitTokens = blendEma(fallbackLimitTokens, currentEstimateTokens, alpha)
+
+    if (paceCostUsdInBlock > 0) {
+      const currentEstimateUsd = (paceCostUsdInBlock / fiveHourUtilization) * 100
+      estimatedLimitUsd = blendEma(fallbackLimitUsd, currentEstimateUsd, alpha)
     }
     calibratedNow = true
   }
 
+  // 航続時間: $ベースで計算できる場合はそちらを優先、できなければトークンベースにフォールバック
   let minutesToLimit: number | null = null
-  if (estimatedLimitTokens != null && burnRatePerMin != null && burnRatePerMin > 0) {
+  if (estimatedLimitUsd != null && estimatedLimitUsd > 0 && burnRateCostPerMin != null && burnRateCostPerMin > 0) {
+    const remainingUsdToLimit = Math.max(0, estimatedLimitUsd - paceCostUsdInBlock)
+    minutesToLimit = remainingUsdToLimit / burnRateCostPerMin
+  } else if (estimatedLimitTokens != null && burnRatePerMin != null && burnRatePerMin > 0) {
     const remainingTokensToLimit = Math.max(0, estimatedLimitTokens - paceTokensInBlock)
     minutesToLimit = remainingTokensToLimit / burnRatePerMin
   }
@@ -218,9 +244,11 @@ export function getCcPaceData(
     available: true,
     paceTokensInBlock,
     burnRatePerMin,
+    burnRateCostPerMin,
     minutesToLimit,
     minutesToReset,
     estimatedLimitTokens,
+    estimatedLimitUsd,
     calibratedNow,
   }
 }

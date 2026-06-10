@@ -20,6 +20,12 @@ function formatTokens(n: number): string {
   return String(Math.round(n))
 }
 
+function formatUsd(n: number): string {
+  if (n >= 100) return Math.round(n).toLocaleString()
+  if (n >= 1) return n.toFixed(1)
+  return n.toFixed(2)
+}
+
 function formatMinutes(min: number): string {
   const totalMin = Math.max(0, Math.round(min))
   const hours = Math.floor(totalMin / 60)
@@ -123,7 +129,12 @@ export function UsageCard({ label, description, entry, color, highlight, periodM
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: th.textMuted, marginTop: 3 }}>
           <span>
             🔥 {t('ccPaceBurnRate', formatTokens(ccPace.burnRatePerMin))}
-            {ccPace.estimatedLimitTokens != null && (
+            {ccPace.burnRateCostPerMin != null && ccPace.burnRateCostPerMin > 0 && (
+              <> {t('ccPaceCostRate', formatUsd(ccPace.burnRateCostPerMin))}</>
+            )}
+            {ccPace.estimatedLimitUsd != null && ccPace.estimatedLimitUsd > 0 ? (
+              <> {t('ccPaceLimitEstUsd', formatUsd(ccPace.estimatedLimitUsd))}</>
+            ) : ccPace.estimatedLimitTokens != null && (
               <> {t('ccPaceLimitEst', formatTokens(ccPace.estimatedLimitTokens))}</>
             )}
           </span>

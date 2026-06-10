@@ -55,7 +55,7 @@ let lastUsage: UsageData | null = null
 let lastProfile: ProfileData | null = null
 let lastSuccessAt: Date | null = null
 let lastBeta: BetaProvidersData = { copilot: null, codex: null, gemini: null }
-let lastCcPace: CcPaceData = { available: false, paceTokensInBlock: null, burnRatePerMin: null, minutesToLimit: null, minutesToReset: null, estimatedLimitTokens: null, calibratedNow: false }
+let lastCcPace: CcPaceData = { available: false, paceTokensInBlock: null, burnRatePerMin: null, burnRateCostPerMin: null, minutesToLimit: null, minutesToReset: null, estimatedLimitTokens: null, estimatedLimitUsd: null, calibratedNow: false }
 let ccPaceTimer: ReturnType<typeof setInterval> | null = null
 
 // ---- Display Helper ----
@@ -484,11 +484,13 @@ function updateCcPace(): void {
   lastCcPace = getCcPaceData(
     lastUsage?.five_hour?.utilization ?? null,
     lastUsage?.five_hour?.resets_at ?? null,
-    settings.ccPaceCalibration?.estimatedLimitTokens ?? null
+    settings.ccPaceCalibration?.estimatedLimitTokens ?? null,
+    settings.ccPaceCalibration?.estimatedLimitUsd ?? null
   )
   if (lastCcPace.calibratedNow && lastCcPace.estimatedLimitTokens != null) {
     settings.ccPaceCalibration = {
       estimatedLimitTokens: lastCcPace.estimatedLimitTokens,
+      estimatedLimitUsd: lastCcPace.estimatedLimitUsd ?? undefined,
       updatedAt: new Date().toISOString(),
     }
     saveSettings(settings)

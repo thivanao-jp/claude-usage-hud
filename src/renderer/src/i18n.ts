@@ -30,7 +30,9 @@ const en = {
 
   // ---- cc-pace-meter (car metaphor) ----
   ccPaceBurnRate: 'Fuel: {0} tok/min',
+  ccPaceCostRate: '(${0}/min)',
   ccPaceLimitEst: '(tank ~{0})',
+  ccPaceLimitEstUsd: '(tank ~${0})',
   ccPaceRange: 'Range: ~{0}',
 
   // カードラベル
@@ -167,7 +169,9 @@ const ja = {
   remaining:      '残り',
 
   ccPaceBurnRate: '燃費: {0} tok/分',
+  ccPaceCostRate: '(${0}/分)',
   ccPaceLimitEst: '(推定上限 ~{0})',
+  ccPaceLimitEstUsd: '(推定上限 ~${0})',
   ccPaceRange: '航続: 約{0}',
 
   label5h:        '5時間',

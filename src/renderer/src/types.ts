@@ -130,9 +130,11 @@ export interface CcPaceData {
   available: boolean
   paceTokensInBlock: number | null
   burnRatePerMin: number | null
+  burnRateCostPerMin: number | null
   minutesToLimit: number | null
   minutesToReset: number | null
   estimatedLimitTokens: number | null
+  estimatedLimitUsd: number | null
   calibratedNow: boolean
 }
 
