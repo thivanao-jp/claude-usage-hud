@@ -18,7 +18,13 @@ export interface CcPaceData {
   minutesToLimit: number | null
   /** 5h枠リセットまでの残り分数 */
   minutesToReset: number | null
+  /** utilization% から逆算した5h枠の推定トークン上限（100%相当のトークン数） */
+  estimatedLimitTokens: number | null
+  /** 今回のブロックで新たにキャリブレーションできたか（true なら永続化推奨） */
+  calibratedNow: boolean
 }
+
+const MIN_UTIL_FOR_CALIBRATION = 5 // % 未満は逆算値が不安定なので信頼しない
 
 interface UsageEvent {
   timestamp: number
@@ -146,10 +152,12 @@ export function pollCcUsage(): void {
  * 5h枠の利用状況を元に、現在のバーンレートと着地予測を計算する。
  * @param fiveHourUtilization API由来の現在の5h枠使用率（%）
  * @param resetsAtIso API由来の5h枠リセット時刻（ISO文字列）
+ * @param fallbackLimitTokens 過去にキャリブレーションした推定上限（今回算出できない場合のフォールバック）
  */
 export function getCcPaceData(
   fiveHourUtilization: number | null,
-  resetsAtIso: string | null
+  resetsAtIso: string | null,
+  fallbackLimitTokens: number | null = null
 ): CcPaceData {
   const empty: CcPaceData = {
     available: events.length > 0,
@@ -157,6 +165,8 @@ export function getCcPaceData(
     burnRatePerMin: null,
     minutesToLimit: null,
     minutesToReset: null,
+    estimatedLimitTokens: fallbackLimitTokens,
+    calibratedNow: false,
   }
   if (events.length === 0) return empty
   if (!resetsAtIso) return empty
@@ -181,20 +191,17 @@ export function getCcPaceData(
 
   const minutesToReset = remainingMs / 60000
 
+  let estimatedLimitTokens = fallbackLimitTokens
+  let calibratedNow = false
+  if (fiveHourUtilization != null && fiveHourUtilization > MIN_UTIL_FOR_CALIBRATION && paceTokensInBlock > 0) {
+    estimatedLimitTokens = (paceTokensInBlock / fiveHourUtilization) * 100
+    calibratedNow = true
+  }
+
   let minutesToLimit: number | null = null
-  if (
-    fiveHourUtilization != null &&
-    fiveHourUtilization > 0.5 &&
-    paceTokensInBlock > 0 &&
-    burnRatePerMin != null && burnRatePerMin > 0
-  ) {
-    if (fiveHourUtilization >= 100) {
-      minutesToLimit = 0
-    } else {
-      const tokensPerPercent = paceTokensInBlock / fiveHourUtilization
-      const remainingTokensToLimit = (100 - fiveHourUtilization) * tokensPerPercent
-      minutesToLimit = remainingTokensToLimit / burnRatePerMin
-    }
+  if (estimatedLimitTokens != null && burnRatePerMin != null && burnRatePerMin > 0) {
+    const remainingTokensToLimit = Math.max(0, estimatedLimitTokens - paceTokensInBlock)
+    minutesToLimit = remainingTokensToLimit / burnRatePerMin
   }
 
   return {
@@ -203,5 +210,7 @@ export function getCcPaceData(
     burnRatePerMin,
     minutesToLimit,
     minutesToReset,
+    estimatedLimitTokens,
+    calibratedNow,
   }
 }

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { UsageData, Settings, UsageEntry, BetaProvidersData } from '../types'
+import { UsageData, Settings, UsageEntry, BetaProvidersData, CcPaceData } from '../types'
 import { useTheme } from '../ThemeContext'
 import { calcPacePct } from '../paceUtil'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
@@ -9,6 +9,7 @@ interface Props {
   settings: Settings
   beta?: BetaProvidersData
   isStale: boolean
+  ccPace?: CcPaceData
 }
 
 const HOUR = 60 * 60 * 1000
@@ -21,6 +22,7 @@ interface BarDef {
   pct: number
   resetAt: string | null
   periodMs: number | null
+  warning?: boolean
 }
 
 function formatRelCompact(iso: string | null): string {
@@ -36,7 +38,7 @@ function formatRelCompact(iso: string | null): string {
   return `${mins}m`
 }
 
-export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
+export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Props) {
   const th = useTheme()
 
   const clickThrough = settings.window.clickThrough ?? true
@@ -51,6 +53,12 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
 
   const barDefs: BarDef[] = []
 
+  const ccPaceWarning = !!(
+    ccPace?.minutesToLimit != null &&
+    ccPace?.minutesToReset != null &&
+    ccPace.minutesToLimit < ccPace.minutesToReset
+  )
+
   if (settings.tray.show5h) {
     const entry = usageRecord?.['five_hour'] ?? null
     barDefs.push({
@@ -60,6 +68,7 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
       pct: entry ? Math.min(Math.round(entry.utilization), 100) : 0,
       resetAt: entry?.resets_at ?? null,
       periodMs: 5 * HOUR,
+      warning: ccPaceWarning,
     })
   }
 
@@ -156,6 +165,7 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
       pct: entry ? Math.min(Math.round(entry.utilization), 100) : 0,
       resetAt: entry?.resets_at ?? null,
       periodMs: 5 * HOUR,
+      warning: ccPaceWarning,
     })
   }
 
@@ -202,6 +212,7 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
                 overflow: 'hidden',
                 background: isStale ? 'rgba(224,161,43,0.12)' : th.bgBar,
                 marginBottom: isLast ? 0 : 2,
+                boxShadow: item.warning ? 'inset 0 0 0 1px #e05a2b' : undefined,
               }}
             >
               <div style={{
@@ -226,7 +237,7 @@ export function UltraCompactView({ usage, settings, beta, isStale }: Props) {
                 }} />
               )}
               <div style={textStyle}>
-                <span style={{ width: 24, flexShrink: 0 }}>{item.label}</span>
+                <span style={{ width: 24, flexShrink: 0 }}>{item.warning ? '🔥' : item.label}</span>
                 <span style={{ flex: 1 }} />
                 <span style={{ marginRight: 4 }}>{rel}</span>
                 <span style={{ minWidth: 26, textAlign: 'right' }}>{item.pct}%</span>

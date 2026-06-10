@@ -55,7 +55,7 @@ let lastUsage: UsageData | null = null
 let lastProfile: ProfileData | null = null
 let lastSuccessAt: Date | null = null
 let lastBeta: BetaProvidersData = { copilot: null, codex: null, gemini: null }
-let lastCcPace: CcPaceData = { available: false, paceTokensInBlock: null, burnRatePerMin: null, projectedUtilization: null }
+let lastCcPace: CcPaceData = { available: false, paceTokensInBlock: null, burnRatePerMin: null, minutesToLimit: null, minutesToReset: null, estimatedLimitTokens: null, calibratedNow: false }
 let ccPaceTimer: ReturnType<typeof setInterval> | null = null
 
 // ---- Display Helper ----
@@ -89,12 +89,13 @@ const COMPACT_W = 320
 const COMPACT_BAR_H = 38   // 1本のバーの高さ（ペースライン含む、bar=28+margin=4+pace=4+gap=2）
 const COMPACT_BTN_H = 28   // ボタン行の高さ
 const COMPACT_PAD = 8      // 上下パディング合計
+const COMPACT_CCPACE_H = 14 // cc-pace-meter 行の追加高さ（5hバーの下）
 const ULTRA_W = 160
 const ULTRA_BAR_H = 18     // 16px bar + 2px margin
 const ULTRA_HANDLE_H = 4
 const ULTRA_PAD = 4        // bottom padding
 
-function getCompactHeight(settings: Settings): number {
+function getCompactHeight(settings: Settings, ccPace?: CcPaceData | null): number {
   const showFields = settings.tray.showFields ?? {}
   const bp = settings.betaProviders ?? {}
   const count = [
@@ -107,7 +108,8 @@ function getCompactHeight(settings: Settings): number {
     bp.gemini?.enabled ?? false,  // Pro bar
     bp.gemini?.enabled ?? false,  // Flash bar
   ].filter(Boolean).length || 1
-  return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD
+  const ccPaceExtra = (settings.tray.show5h && ccPace?.available && ccPace.burnRatePerMin != null) ? COMPACT_CCPACE_H : 0
+  return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD + ccPaceExtra
 }
 
 function getDetailHeight(settings: Settings): number {
@@ -142,9 +144,9 @@ function getUltraHeight(settings: Settings, usage?: UsageData | null, beta?: Bet
   return ULTRA_HANDLE_H + count * ULTRA_BAR_H - 2 + ULTRA_PAD
 }
 
-function getWindowSize(mode: ViewMode, settings: Settings, usage?: UsageData | null, beta?: BetaProvidersData | null): { w: number; h: number } {
+function getWindowSize(mode: ViewMode, settings: Settings, usage?: UsageData | null, beta?: BetaProvidersData | null, ccPace?: CcPaceData | null): { w: number; h: number } {
   if (mode === 'ultra')   return { w: ULTRA_W, h: getUltraHeight(settings, usage, beta) }
-  if (mode === 'compact') return { w: COMPACT_W, h: getCompactHeight(settings) }
+  if (mode === 'compact') return { w: COMPACT_W, h: getCompactHeight(settings, ccPace) }
   return { w: DETAIL_W, h: getDetailHeight(settings) }
 }
 
@@ -292,7 +294,7 @@ function switchViewMode(mode: ViewMode): void {
 
   if (!hudWindow || hudWindow.isDestroyed()) return
 
-  const { w, h } = getWindowSize(mode, s)
+  const { w, h } = getWindowSize(mode, s, lastUsage, lastBeta, lastCcPace)
   hudWindow.setSize(w, h)
 
   let pos: { x: number; y: number }
@@ -432,12 +434,15 @@ function openSettingsWindow(): void {
     title: 'Settings',
     backgroundColor: '#1a1a1f',
     autoHideMenuBar: true,
+    show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false
     }
   })
+
+  settingsWindow.once('ready-to-show', () => settingsWindow?.show())
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     settingsWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/settings`)
@@ -459,6 +464,9 @@ function sendToHud(isStale: boolean): void {
     hudWindow.setSize(w, h)
     const { x, y } = getUltraSnapPosition(s.window.ultraPosition ?? 'top-right', w, hudWindow)
     hudWindow.setPosition(x, y)
+  } else if (s.viewMode === 'compact') {
+    const { w, h } = getWindowSize('compact', s, lastUsage, lastBeta, lastCcPace)
+    hudWindow.setSize(w, h)
   }
   hudWindow.webContents.send('usage-update', {
     usage: lastUsage,
@@ -472,10 +480,19 @@ function sendToHud(isStale: boolean): void {
 
 function updateCcPace(): void {
   pollCcUsage()
+  const settings = loadSettings()
   lastCcPace = getCcPaceData(
     lastUsage?.five_hour?.utilization ?? null,
-    lastUsage?.five_hour?.resets_at ?? null
+    lastUsage?.five_hour?.resets_at ?? null,
+    settings.ccPaceCalibration?.estimatedLimitTokens ?? null
   )
+  if (lastCcPace.calibratedNow && lastCcPace.estimatedLimitTokens != null) {
+    settings.ccPaceCalibration = {
+      estimatedLimitTokens: lastCcPace.estimatedLimitTokens,
+      updatedAt: new Date().toISOString(),
+    }
+    saveSettings(settings)
+  }
   sendToHud(lastUsage == null)
 }
 
@@ -616,7 +633,7 @@ ipcMain.handle('save-settings', (_e, settings: Settings) => {
     const s = loadSettings()
     hudWindow.setAlwaysOnTop(s.window.alwaysOnTop)
     hudWindow.setOpacity(s.window.opacity / 100)
-    const { w, h } = getWindowSize(s.viewMode, s)
+    const { w, h } = getWindowSize(s.viewMode, s, lastUsage, lastBeta, lastCcPace)
     hudWindow.setSize(w, h)
     if (s.viewMode === 'ultra') {
       const { x, y } = getUltraSnapPosition(s.window.ultraPosition ?? 'top-right', w, hudWindow)

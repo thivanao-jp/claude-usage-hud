@@ -28,9 +28,10 @@ const en = {
   resetLabel:     'Reset:',
   remaining:      'Remaining',
 
-  // ---- cc-pace-meter ----
-  ccPaceBurnRate: 'Burn rate: {0} tok/min',
-  ccPaceLimitWarning: '⚠ At this pace, limit in ~{0}',
+  // ---- cc-pace-meter (car metaphor) ----
+  ccPaceBurnRate: 'Fuel: {0} tok/min',
+  ccPaceLimitEst: '(tank ~{0})',
+  ccPaceRange: 'Range: ~{0}',
 
   // カードラベル
   label5h:        '5-Hour',
@@ -165,8 +166,9 @@ const ja = {
   resetLabel:     'リセット:',
   remaining:      '残り',
 
-  ccPaceBurnRate: '消費ペース: {0} tok/分',
-  ccPaceLimitWarning: '⚠ このペースだと上限まで残り約{0}',
+  ccPaceBurnRate: '燃費: {0} tok/分',
+  ccPaceLimitEst: '(推定上限 ~{0})',
+  ccPaceRange: '航続: 約{0}',
 
   label5h:        '5時間',
   label7d:        '7日間 (claude.ai)',
