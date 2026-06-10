@@ -25,6 +25,9 @@ export interface CcPaceData {
 }
 
 const MIN_UTIL_FOR_CALIBRATION = 5 // % 未満は逆算値が不安定なので信頼しない
+// EMAの追従速度: utilization% が高いほど1回あたりの寄与を大きくする（5%→約0.05、50%以上→上限0.3）
+const EMA_ALPHA_MIN = 0.05
+const EMA_ALPHA_MAX = 0.3
 
 interface UsageEvent {
   timestamp: number
@@ -194,7 +197,14 @@ export function getCcPaceData(
   let estimatedLimitTokens = fallbackLimitTokens
   let calibratedNow = false
   if (fiveHourUtilization != null && fiveHourUtilization > MIN_UTIL_FOR_CALIBRATION && paceTokensInBlock > 0) {
-    estimatedLimitTokens = (paceTokensInBlock / fiveHourUtilization) * 100
+    const currentEstimate = (paceTokensInBlock / fiveHourUtilization) * 100
+    if (fallbackLimitTokens != null) {
+      // utilization% が高いほど信頼度が高いとみなし、EMAの追従速度を上げる
+      const alpha = Math.min(EMA_ALPHA_MAX, Math.max(EMA_ALPHA_MIN, fiveHourUtilization / 100))
+      estimatedLimitTokens = fallbackLimitTokens * (1 - alpha) + currentEstimate * alpha
+    } else {
+      estimatedLimitTokens = currentEstimate
+    }
     calibratedNow = true
   }
 
