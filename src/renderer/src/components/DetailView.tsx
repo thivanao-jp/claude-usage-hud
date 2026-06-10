@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { UsageData, ProfileData, ExtraUsage, Settings, UsageEntry, BetaProvidersData, CopilotUsageData, CodexUsageData, GeminiModelData } from '../types'
+import { UsageData, ProfileData, ExtraUsage, Settings, UsageEntry, BetaProvidersData, CopilotUsageData, CodexUsageData, GeminiModelData, CcPaceData } from '../types'
 import { UsageCard } from './UsageCard'
 import { HistoryChart } from './HistoryChart'
 import { useT } from '../LangContext'
@@ -20,6 +20,7 @@ interface Props {
   settings: Settings
   lastSuccessAt: Date | null
   isStale: boolean
+  ccPace?: CcPaceData
   onSwitchToCompact: () => void
   onRefresh: () => void
 }
@@ -51,7 +52,7 @@ function planLabel(p: ProfileData, usage?: UsageData | null): string {
   return raw ? raw.split('_').slice(0, 2).join(' ') : '?'
 }
 
-export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, onSwitchToCompact, onRefresh }: Props) {
+export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, ccPace, onSwitchToCompact, onRefresh }: Props) {
   const t = useT()
   const th = useTheme()
   const lang = useLang()
@@ -127,7 +128,7 @@ export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, o
         {usage ? (
           <>
             {usage.five_hour && (
-              <UsageCard label={t('label5h')} description={t('desc5h')} entry={usage.five_hour} color="#4a9eff" periodMs={5 * HOUR} paceSettings={settings.pace} />
+              <UsageCard label={t('label5h')} description={t('desc5h')} entry={usage.five_hour} color="#4a9eff" periodMs={5 * HOUR} paceSettings={settings.pace} ccPace={ccPace} />
             )}
             {WEEKLY_FIELD_DEFS.map(field => {
               const entry = getWeeklyEntry(usage, field.key)

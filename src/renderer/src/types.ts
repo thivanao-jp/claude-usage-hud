@@ -124,6 +124,16 @@ export interface BetaProvidersData {
   gemini: GeminiUsageData | null
 }
 
+// ---- cc-pace-meter (ローカルJSONLベースのバーンレート) ----
+
+export interface CcPaceData {
+  available: boolean
+  paceTokensInBlock: number | null
+  burnRatePerMin: number | null
+  minutesToLimit: number | null
+  minutesToReset: number | null
+}
+
 export interface HistoryRow {
   recorded_at: string
   five_hour: number | null
@@ -162,6 +172,7 @@ declare global {
         lastSuccessAt: string | null
         isStale: boolean
         beta?: BetaProvidersData
+        ccPace?: CcPaceData
       }) => void) => () => void
       onModeChanged: (cb: (mode: string) => void) => () => void
       onLoginStatusChanged: (cb: (status: 'logged-in' | 'logged-out' | 'unknown') => void) => () => void
@@ -172,6 +183,8 @@ declare global {
       onUpdateStatus: (cb: (status: UpdateStatus) => void) => () => void
       setIgnoreMouseEvents: (ignore: boolean) => void
       setWindowOpacity: (opacity: number) => void
+      // cc-pace-meter
+      getCcPaceData: () => Promise<CcPaceData>
       // Beta providers
       getBetaData: () => Promise<BetaProvidersData>
       getCopilotLoginStatus: () => Promise<'logged-in' | 'logged-out' | 'unknown'>

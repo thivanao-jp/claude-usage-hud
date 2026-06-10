@@ -3,7 +3,7 @@ import { DetailView } from './components/DetailView'
 import { CompactView } from './components/CompactView'
 import { UltraCompactView } from './components/UltraCompactView'
 import { SettingsView } from './components/SettingsView'
-import { UsageData, ProfileData, Settings, ViewMode, BetaProvidersData } from './types'
+import { UsageData, ProfileData, Settings, ViewMode, BetaProvidersData, CcPaceData } from './types'
 import { LangContext, useT } from './LangContext'
 import { ThemeContext } from './ThemeContext'
 import { resolveLang } from './i18n'
@@ -45,6 +45,7 @@ function HudApp() {
   const [lastSuccessAt, setLastSuccessAt] = useState<Date | null>(null)
   const [isStale, setIsStale] = useState(false)
   const [beta, setBeta] = useState<BetaProvidersData>({ copilot: null, codex: null, gemini: null })
+  const [ccPace, setCcPace] = useState<CcPaceData>({ available: false, paceTokensInBlock: null, burnRatePerMin: null, minutesToLimit: null, minutesToReset: null })
 
   useEffect(() => {
     window.api.getUsage().then(({ usage, profile }) => {
@@ -56,13 +57,15 @@ function HudApp() {
       setMode(s.viewMode ?? 'compact')
     })
     window.api.getBetaData().then(setBeta).catch(() => {})
+    window.api.getCcPaceData().then(setCcPace).catch(() => {})
 
-    const unsubUsage = window.api.onUsageUpdate(({ usage, profile, lastSuccessAt, isStale, beta }) => {
+    const unsubUsage = window.api.onUsageUpdate(({ usage, profile, lastSuccessAt, isStale, beta, ccPace }) => {
       setUsage(usage)
       setProfile(profile)
       setIsStale(isStale)
       if (lastSuccessAt) setLastSuccessAt(new Date(lastSuccessAt))
       if (beta) setBeta(beta)
+      if (ccPace) setCcPace(ccPace)
     })
     const unsubMode = window.api.onModeChanged(m => setMode(m as ViewMode))
     const unsubSettings = window.api.onSettingsChanged(s => setSettings(s as Settings))
@@ -107,6 +110,7 @@ function HudApp() {
       settings={settings}
       lastSuccessAt={lastSuccessAt}
       isStale={isStale}
+      ccPace={ccPace}
       onRefresh={() => window.api.refresh()}
       onSwitchToCompact={() => switchMode('compact')}
     />
