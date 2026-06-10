@@ -28,6 +28,10 @@ const en = {
   resetLabel:     'Reset:',
   remaining:      'Remaining',
 
+  // ---- cc-pace-meter ----
+  ccPaceBurnRate: 'Burn rate: {0} tok/min',
+  ccPaceLimitWarning: '⚠ At this pace, limit in ~{0}',
+
   // カードラベル
   label5h:        '5-Hour',
   label7d:        '7-Day (claude.ai)',
@@ -160,6 +164,9 @@ const ja = {
 
   resetLabel:     'リセット:',
   remaining:      '残り',
+
+  ccPaceBurnRate: '消費ペース: {0} tok/分',
+  ccPaceLimitWarning: '⚠ このペースだと上限まで残り約{0}',
 
   label5h:        '5時間',
   label7d:        '7日間 (claude.ai)',

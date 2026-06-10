@@ -24,6 +24,7 @@ import { GitHubCopilotFetcher } from './githubCopilotFetcher'
 import { CodexFetcher } from './codexFetcher'
 import { GeminiFetcher } from './geminiFetcher'
 import { createBarIcon } from './trayIcon'
+import { pollCcUsage, getCcPaceData, CcPaceData } from './ccPaceMeter'
 
 // stdoutがバッファリングされることがあるため、ログは直接ファイルに書き込む
 // app.getPath('logs') はプラットフォームに応じた適切なディレクトリを返す
@@ -54,6 +55,8 @@ let lastUsage: UsageData | null = null
 let lastProfile: ProfileData | null = null
 let lastSuccessAt: Date | null = null
 let lastBeta: BetaProvidersData = { copilot: null, codex: null, gemini: null }
+let lastCcPace: CcPaceData = { available: false, paceTokensInBlock: null, burnRatePerMin: null, projectedUtilization: null }
+let ccPaceTimer: ReturnType<typeof setInterval> | null = null
 
 // ---- Display Helper ----
 
@@ -463,7 +466,17 @@ function sendToHud(isStale: boolean): void {
     lastSuccessAt: lastSuccessAt?.toISOString() ?? null,
     isStale,
     beta: lastBeta,
+    ccPace: lastCcPace,
   })
+}
+
+function updateCcPace(): void {
+  pollCcUsage()
+  lastCcPace = getCcPaceData(
+    lastUsage?.five_hour?.utilization ?? null,
+    lastUsage?.five_hour?.resets_at ?? null
+  )
+  sendToHud(lastUsage == null)
 }
 
 async function doUpdate(): Promise<void> {
@@ -543,6 +556,12 @@ function scheduleUpdates(): void {
   // Beta providers は Claude より少し遅らせて起動直後の負荷を分散
   setTimeout(doUpdateBeta, 8000)
   updateTimer = setInterval(() => { doUpdate(); doUpdateBeta() }, intervalMs)
+}
+
+function scheduleCcPaceUpdates(): void {
+  if (ccPaceTimer) clearInterval(ccPaceTimer)
+  setTimeout(updateCcPace, 1000)
+  ccPaceTimer = setInterval(updateCcPace, 30 * 1000)
 }
 
 // ---- Alerts ----
@@ -629,6 +648,7 @@ ipcMain.on('set-window-opacity', (event, opacity: number) => {
 })
 // Beta providers
 ipcMain.handle('get-beta-data', () => lastBeta)
+ipcMain.handle('get-cc-pace-data', () => lastCcPace)
 ipcMain.handle('get-copilot-login-status', () => copilotFetcher.getLoginStatus())
 ipcMain.handle('get-codex-login-status', () => codexFetcher.getLoginStatus())
 ipcMain.handle('get-gemini-login-status', () => geminiFetcher.getLoginStatus())
@@ -737,6 +757,7 @@ function startLocalApiServer(): void {
       extra_usage: lastUsage?.extra_usage ?? null,
       last_updated: lastSuccessAt?.toISOString() ?? null,
       beta: lastBeta,
+      cc_pace: lastCcPace,
     }))
   })
 
@@ -815,6 +836,7 @@ if (!gotTheLock) {
     hudWindow = createHudWindow()
     hudWindow.show()
     scheduleUpdates()
+    scheduleCcPaceUpdates()
     startLocalApiServer()
     setupAutoUpdater()
   })

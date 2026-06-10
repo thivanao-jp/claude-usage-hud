@@ -1,4 +1,4 @@
-import { UsageEntry, Settings } from '../types'
+import { UsageEntry, Settings, CcPaceData } from '../types'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { calcPacePct } from '../paceUtil'
@@ -11,6 +11,20 @@ interface Props {
   highlight?: boolean
   periodMs: number
   paceSettings?: Settings['pace']
+  ccPace?: CcPaceData
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
+  return String(Math.round(n))
+}
+
+function formatMinutes(min: number): string {
+  const totalMin = Math.max(0, Math.round(min))
+  const hours = Math.floor(totalMin / 60)
+  const mins = totalMin % 60
+  if (hours > 0) return mins > 0 ? `${hours}h${mins}m` : `${hours}h`
+  return `${mins}m`
 }
 
 function formatResetAt(iso: string | null, resettingLabel: string): { abs: string; rel: string } {
@@ -40,7 +54,7 @@ function formatResetAt(iso: string | null, resettingLabel: string): { abs: strin
   return { abs, rel: rel.trim() }
 }
 
-export function UsageCard({ label, description, entry, color, highlight, periodMs, paceSettings }: Props) {
+export function UsageCard({ label, description, entry, color, highlight, periodMs, paceSettings, ccPace }: Props) {
   const t = useT()
   const th = useTheme()
   const pct = Math.min(Math.round(entry.utilization), 100)
@@ -103,6 +117,17 @@ export function UsageCard({ label, description, entry, color, highlight, periodM
       </div>
 
       <div style={{ fontSize: 10, color: th.textDesc, marginTop: 3 }}>{description}</div>
+
+      {ccPace?.available && ccPace.burnRatePerMin != null && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: th.textMuted, marginTop: 3 }}>
+          <span>🔥 {t('ccPaceBurnRate', formatTokens(ccPace.burnRatePerMin))}</span>
+          {ccPace.minutesToLimit != null && ccPace.minutesToReset != null && ccPace.minutesToLimit < ccPace.minutesToReset && (
+            <span style={{ color: '#e05a2b' }}>
+              {t('ccPaceLimitWarning', formatMinutes(ccPace.minutesToLimit))}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 }

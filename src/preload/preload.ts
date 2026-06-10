@@ -39,6 +39,8 @@ contextBridge.exposeInMainWorld('api', {
   },
   setIgnoreMouseEvents: (ignore: boolean) => ipcRenderer.send('set-ignore-mouse-events', ignore),
   setWindowOpacity: (opacity: number) => ipcRenderer.send('set-window-opacity', opacity),
+  // cc-pace-meter
+  getCcPaceData: () => ipcRenderer.invoke('get-cc-pace-data'),
   // Beta providers
   getBetaData: () => ipcRenderer.invoke('get-beta-data'),
   getCopilotLoginStatus: () => ipcRenderer.invoke('get-copilot-login-status'),
