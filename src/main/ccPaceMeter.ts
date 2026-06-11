@@ -17,6 +17,11 @@ const BOOTSTRAP_MAX_INITIAL_READ = 16 * 1024 * 1024
 const BOOTSTRAP_MAX_BLOCKS = 4 // 過去何ブロック分まで遡ってサンプル化するか
 const MAX_RECORD_GAP_MS = 60 * 60 * 1000 // usage_history のレコードがブロック境界からこれ以上離れていたら使わない
 
+// ディレクトリ全体の再走査（readdir）はこの間隔でのみ行い、それ以外は前回のファイル一覧を再利用する
+const DIR_RESCAN_INTERVAL_MS = 5 * 60 * 1000
+// 最終更新がこれより古いファイルは「非アクティブ」とみなし、再走査時のみ stat する
+const DORMANT_THRESHOLD_MS = LOOKBACK_MS
+
 export interface CcPaceData {
   available: boolean
   paceTokensInBlock: number | null
@@ -69,6 +74,11 @@ const fileStates = new Map<string, FileState>()
 const seenKeys = new Set<string>()
 let events: UsageEvent[] = []
 let trackedLookbackMs = LOOKBACK_MS
+
+// ディレクトリ再走査のキャッシュ
+let lastDirScanAt = 0
+let knownFiles: string[] = []
+const dormantFiles = new Set<string>()
 
 async function walkJsonlFiles(dir: string, out: string[]): Promise<void> {
   let entries
@@ -185,11 +195,30 @@ export async function pollCcUsage(lookbackMs: number = LOOKBACK_MS): Promise<voi
     trackedLookbackMs = Math.max(trackedLookbackMs, lookbackMs)
     const initialReadCap = lookbackMs > LOOKBACK_MS ? BOOTSTRAP_MAX_INITIAL_READ : MAX_INITIAL_READ
 
-    const files: string[] = []
-    await walkJsonlFiles(PROJECTS_DIR, files)
-    for (const f of files) await pollFile(f, lookbackMs, initialReadCap)
+    const now = Date.now()
+    // ディレクトリ全体の再走査は間引く（ブートストラップ時は常に実施）
+    const isRescan = lookbackMs > LOOKBACK_MS || now - lastDirScanAt > DIR_RESCAN_INTERVAL_MS || knownFiles.length === 0
+    if (isRescan) {
+      knownFiles = []
+      await walkJsonlFiles(PROJECTS_DIR, knownFiles)
+      lastDirScanAt = now
+    }
 
-    const cutoff = Date.now() - trackedLookbackMs
+    for (const f of knownFiles) {
+      // 非アクティブなファイルは再走査タイミングのみ確認する（毎回のstatを省く）
+      if (!isRescan && dormantFiles.has(f)) continue
+
+      await pollFile(f, lookbackMs, initialReadCap)
+
+      const known = fileStates.get(f)
+      if (known && now - known.mtimeMs > DORMANT_THRESHOLD_MS) {
+        dormantFiles.add(f)
+      } else {
+        dormantFiles.delete(f)
+      }
+    }
+
+    const cutoff = now - trackedLookbackMs
     events = events.filter(e => e.timestamp >= cutoff)
 
     // seenKeys が際限なく増えないよう、定期的にクリア
