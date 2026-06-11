@@ -1,6 +1,6 @@
 import { homedir } from 'os'
 import { join } from 'path'
-import { readdirSync, statSync, openSync, readSync, closeSync } from 'fs'
+import { readdir, stat, open } from 'fs/promises'
 import { calcPaceCostUsd } from './modelPricing'
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
@@ -70,16 +70,16 @@ const seenKeys = new Set<string>()
 let events: UsageEvent[] = []
 let trackedLookbackMs = LOOKBACK_MS
 
-function walkJsonlFiles(dir: string, out: string[]): void {
+async function walkJsonlFiles(dir: string, out: string[]): Promise<void> {
   let entries
   try {
-    entries = readdirSync(dir, { withFileTypes: true })
+    entries = await readdir(dir, { withFileTypes: true })
   } catch {
     return
   }
   for (const e of entries) {
     const full = join(dir, e.name)
-    if (e.isDirectory()) walkJsonlFiles(full, out)
+    if (e.isDirectory()) await walkJsonlFiles(full, out)
     else if (e.isFile() && e.name.endsWith('.jsonl')) out.push(full)
   }
 }
@@ -120,10 +120,10 @@ function parseLine(line: string): void {
   })
 }
 
-function pollFile(path: string, lookbackMs: number, initialReadCap: number): void {
+async function pollFile(path: string, lookbackMs: number, initialReadCap: number): Promise<void> {
   let st
   try {
-    st = statSync(path)
+    st = await stat(path)
   } catch {
     return
   }
@@ -148,11 +148,14 @@ function pollFile(path: string, lookbackMs: number, initialReadCap: number): voi
 
   let text = ''
   try {
-    const fd = openSync(path, 'r')
-    const buf = Buffer.alloc(len)
-    readSync(fd, buf, 0, len, startOffset)
-    closeSync(fd)
-    text = buf.toString('utf8')
+    const fh = await open(path, 'r')
+    try {
+      const buf = Buffer.alloc(len)
+      await fh.read(buf, 0, len, startOffset)
+      text = buf.toString('utf8')
+    } finally {
+      await fh.close()
+    }
   } catch {
     return
   }
@@ -166,24 +169,34 @@ function pollFile(path: string, lookbackMs: number, initialReadCap: number): voi
   fileStates.set(path, { offset: st.size, mtimeMs: st.mtimeMs, partial: incomplete })
 }
 
+let isPolling = false
+
 /**
  * JSONLファイルをポーリングし、新規イベントを取り込む。
+ * すべてfs/promisesによる非同期I/Oで行い、Electronメインプロセスをブロックしない。
  * @param lookbackMs 通常は LOOKBACK_MS（6h）。ブートストラップ時のみ大きい値を渡し、
  *                   一度だけ広い範囲のファイルを読み込む（以後も保持される）。
  */
-export function pollCcUsage(lookbackMs: number = LOOKBACK_MS): void {
-  trackedLookbackMs = Math.max(trackedLookbackMs, lookbackMs)
-  const initialReadCap = lookbackMs > LOOKBACK_MS ? BOOTSTRAP_MAX_INITIAL_READ : MAX_INITIAL_READ
+export async function pollCcUsage(lookbackMs: number = LOOKBACK_MS): Promise<void> {
+  // 前回のポーリングが終わっていなければスキップ（多重実行防止）
+  if (isPolling) return
+  isPolling = true
+  try {
+    trackedLookbackMs = Math.max(trackedLookbackMs, lookbackMs)
+    const initialReadCap = lookbackMs > LOOKBACK_MS ? BOOTSTRAP_MAX_INITIAL_READ : MAX_INITIAL_READ
 
-  const files: string[] = []
-  walkJsonlFiles(PROJECTS_DIR, files)
-  for (const f of files) pollFile(f, lookbackMs, initialReadCap)
+    const files: string[] = []
+    await walkJsonlFiles(PROJECTS_DIR, files)
+    for (const f of files) await pollFile(f, lookbackMs, initialReadCap)
 
-  const cutoff = Date.now() - trackedLookbackMs
-  events = events.filter(e => e.timestamp >= cutoff)
+    const cutoff = Date.now() - trackedLookbackMs
+    events = events.filter(e => e.timestamp >= cutoff)
 
-  // seenKeys が際限なく増えないよう、定期的にクリア
-  if (seenKeys.size > 50000) seenKeys.clear()
+    // seenKeys が際限なく増えないよう、定期的にクリア
+    if (seenKeys.size > 50000) seenKeys.clear()
+  } finally {
+    isPolling = false
+  }
 }
 
 /** EMAでフォールバック値とブレンドする（fallbackがnullなら現在値をそのまま採用） */
