@@ -1,6 +1,6 @@
 import { homedir } from 'os'
 import { join } from 'path'
-import { readdirSync, statSync, openSync, readSync, closeSync } from 'fs'
+import { readdir, stat, open } from 'fs/promises'
 import { calcPaceCostUsd } from './modelPricing'
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
@@ -16,6 +16,11 @@ export const BOOTSTRAP_LOOKBACK_MS = 24 * 60 * 60 * 1000
 const BOOTSTRAP_MAX_INITIAL_READ = 16 * 1024 * 1024
 const BOOTSTRAP_MAX_BLOCKS = 4 // 過去何ブロック分まで遡ってサンプル化するか
 const MAX_RECORD_GAP_MS = 60 * 60 * 1000 // usage_history のレコードがブロック境界からこれ以上離れていたら使わない
+
+// ディレクトリ全体の再走査（readdir）はこの間隔でのみ行い、それ以外は前回のファイル一覧を再利用する
+const DIR_RESCAN_INTERVAL_MS = 5 * 60 * 1000
+// 最終更新がこれより古いファイルは「非アクティブ」とみなし、再走査時のみ stat する
+const DORMANT_THRESHOLD_MS = LOOKBACK_MS
 
 export interface CcPaceData {
   available: boolean
@@ -70,16 +75,21 @@ const seenKeys = new Set<string>()
 let events: UsageEvent[] = []
 let trackedLookbackMs = LOOKBACK_MS
 
-function walkJsonlFiles(dir: string, out: string[]): void {
+// ディレクトリ再走査のキャッシュ
+let lastDirScanAt = 0
+let knownFiles: string[] = []
+const dormantFiles = new Set<string>()
+
+async function walkJsonlFiles(dir: string, out: string[]): Promise<void> {
   let entries
   try {
-    entries = readdirSync(dir, { withFileTypes: true })
+    entries = await readdir(dir, { withFileTypes: true })
   } catch {
     return
   }
   for (const e of entries) {
     const full = join(dir, e.name)
-    if (e.isDirectory()) walkJsonlFiles(full, out)
+    if (e.isDirectory()) await walkJsonlFiles(full, out)
     else if (e.isFile() && e.name.endsWith('.jsonl')) out.push(full)
   }
 }
@@ -120,10 +130,10 @@ function parseLine(line: string): void {
   })
 }
 
-function pollFile(path: string, lookbackMs: number, initialReadCap: number): void {
+async function pollFile(path: string, lookbackMs: number, initialReadCap: number): Promise<void> {
   let st
   try {
-    st = statSync(path)
+    st = await stat(path)
   } catch {
     return
   }
@@ -148,11 +158,14 @@ function pollFile(path: string, lookbackMs: number, initialReadCap: number): voi
 
   let text = ''
   try {
-    const fd = openSync(path, 'r')
-    const buf = Buffer.alloc(len)
-    readSync(fd, buf, 0, len, startOffset)
-    closeSync(fd)
-    text = buf.toString('utf8')
+    const fh = await open(path, 'r')
+    try {
+      const buf = Buffer.alloc(len)
+      await fh.read(buf, 0, len, startOffset)
+      text = buf.toString('utf8')
+    } finally {
+      await fh.close()
+    }
   } catch {
     return
   }
@@ -166,24 +179,53 @@ function pollFile(path: string, lookbackMs: number, initialReadCap: number): voi
   fileStates.set(path, { offset: st.size, mtimeMs: st.mtimeMs, partial: incomplete })
 }
 
+let isPolling = false
+
 /**
  * JSONLファイルをポーリングし、新規イベントを取り込む。
+ * すべてfs/promisesによる非同期I/Oで行い、Electronメインプロセスをブロックしない。
  * @param lookbackMs 通常は LOOKBACK_MS（6h）。ブートストラップ時のみ大きい値を渡し、
  *                   一度だけ広い範囲のファイルを読み込む（以後も保持される）。
  */
-export function pollCcUsage(lookbackMs: number = LOOKBACK_MS): void {
-  trackedLookbackMs = Math.max(trackedLookbackMs, lookbackMs)
-  const initialReadCap = lookbackMs > LOOKBACK_MS ? BOOTSTRAP_MAX_INITIAL_READ : MAX_INITIAL_READ
+export async function pollCcUsage(lookbackMs: number = LOOKBACK_MS): Promise<void> {
+  // 前回のポーリングが終わっていなければスキップ（多重実行防止）
+  if (isPolling) return
+  isPolling = true
+  try {
+    trackedLookbackMs = Math.max(trackedLookbackMs, lookbackMs)
+    const initialReadCap = lookbackMs > LOOKBACK_MS ? BOOTSTRAP_MAX_INITIAL_READ : MAX_INITIAL_READ
 
-  const files: string[] = []
-  walkJsonlFiles(PROJECTS_DIR, files)
-  for (const f of files) pollFile(f, lookbackMs, initialReadCap)
+    const now = Date.now()
+    // ディレクトリ全体の再走査は間引く（ブートストラップ時は常に実施）
+    const isRescan = lookbackMs > LOOKBACK_MS || now - lastDirScanAt > DIR_RESCAN_INTERVAL_MS || knownFiles.length === 0
+    if (isRescan) {
+      knownFiles = []
+      await walkJsonlFiles(PROJECTS_DIR, knownFiles)
+      lastDirScanAt = now
+    }
 
-  const cutoff = Date.now() - trackedLookbackMs
-  events = events.filter(e => e.timestamp >= cutoff)
+    for (const f of knownFiles) {
+      // 非アクティブなファイルは再走査タイミングのみ確認する（毎回のstatを省く）
+      if (!isRescan && dormantFiles.has(f)) continue
 
-  // seenKeys が際限なく増えないよう、定期的にクリア
-  if (seenKeys.size > 50000) seenKeys.clear()
+      await pollFile(f, lookbackMs, initialReadCap)
+
+      const known = fileStates.get(f)
+      if (known && now - known.mtimeMs > DORMANT_THRESHOLD_MS) {
+        dormantFiles.add(f)
+      } else {
+        dormantFiles.delete(f)
+      }
+    }
+
+    const cutoff = now - trackedLookbackMs
+    events = events.filter(e => e.timestamp >= cutoff)
+
+    // seenKeys が際限なく増えないよう、定期的にクリア
+    if (seenKeys.size > 50000) seenKeys.clear()
+  } finally {
+    isPolling = false
+  }
 }
 
 /** EMAでフォールバック値とブレンドする（fallbackがnullなら現在値をそのまま採用） */

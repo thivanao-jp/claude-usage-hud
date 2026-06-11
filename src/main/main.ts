@@ -480,14 +480,14 @@ function sendToHud(isStale: boolean): void {
 
 let ccPaceBootstrapAttempted = false
 
-function updateCcPace(): void {
+async function updateCcPace(): Promise<void> {
   const settings = loadSettings()
 
   // 初回起動時: 過去のJSONL+利用履歴からまとめてキャリブレーションのタネを作る
   if (!ccPaceBootstrapAttempted && !settings.ccPaceCalibration) {
     const resetsAt = lastUsage?.five_hour?.resets_at
     if (resetsAt) {
-      pollCcUsage(BOOTSTRAP_LOOKBACK_MS)
+      await pollCcUsage(BOOTSTRAP_LOOKBACK_MS)
       const history: HistoryPoint[] = getUsageHistory(2)
         .filter(r => r.five_hour != null)
         .map(r => ({
@@ -508,7 +508,7 @@ function updateCcPace(): void {
       ccPaceBootstrapAttempted = true
     }
   } else {
-    pollCcUsage()
+    await pollCcUsage()
   }
 
   lastCcPace = getCcPaceData(
@@ -613,8 +613,9 @@ function scheduleUpdates(): void {
 
 function scheduleCcPaceUpdates(): void {
   if (ccPaceTimer) clearInterval(ccPaceTimer)
-  setTimeout(updateCcPace, 1000)
-  ccPaceTimer = setInterval(updateCcPace, 30 * 1000)
+  const run = (): void => { updateCcPace().catch(e => log('updateCcPace error:', e)) }
+  setTimeout(run, 1000)
+  ccPaceTimer = setInterval(run, 30 * 1000)
 }
 
 // ---- Alerts ----
