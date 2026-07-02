@@ -155,10 +155,14 @@ export class GitHubCopilotFetcher {
   /**
    * レスポンスから使用量データを解析する。
    *
-   * 確認済み構造（copilot_internal/user）:
+   * 確認済み構造（copilot_internal/user、〜2026-06 の Premium Request Unit 課金時代）:
    *   data.quota_snapshots.premium_interactions.{entitlement, remaining, percent_remaining}
    *   data.quota_reset_date_utc
    *   data.copilot_plan
+   *
+   * 2026-06-01 に GitHub Copilot は使用量ベースの「AI Credits」課金へ移行済み
+   * （premium_interactions は legacy 扱い）。新フィールド名は未確認のため、
+   * 'credits'/'ai_credits' 系のキー名も候補に追加し graceful degradation する。
    *
    * unlimited:true のクォータ（chat/completions 等）は無制限なので表示しない。
    */
@@ -170,8 +174,9 @@ export class GitHubCopilotFetcher {
     const snapshots = data['quota_snapshots']
     if (snapshots && typeof snapshots === 'object') {
       const snaps = snapshots as Record<string, unknown>
-      // premium_interactions が最も重要なクォータ（プレミアムリクエスト数）
-      const keys = ['premium_interactions', 'chat', 'completions']
+      // premium_interactions が従来の主要クォータ。2026-06以降の AI Credits 移行に備え
+      // credits 系のキー名も候補に含める（実際のキー名は未確認）
+      const keys = ['premium_interactions', 'ai_credits', 'credits', 'chat', 'completions']
       for (const key of keys) {
         const snap = snaps[key]
         if (!snap || typeof snap !== 'object') continue
@@ -192,18 +197,21 @@ export class GitHubCopilotFetcher {
       }
     }
 
-    // フラットフィールド形式（Free/Pro 個人プランで使われる可能性）
+    // フラットフィールド形式（Free/Pro 個人プランや AI Credits 課金で使われる可能性）
     const limit = Number(
       data['monthly_included_requests'] ?? data['quota_monthly'] ??
-      data['monthly_quota'] ?? data['monthly_requests_limit'] ?? 0
+      data['monthly_quota'] ?? data['monthly_requests_limit'] ??
+      data['ai_credits_included'] ?? data['ai_credits_entitlement'] ?? data['monthly_credits'] ?? 0
     )
     const used = Number(
       data['used_requests'] ?? data['quota_used'] ??
-      data['monthly_requests_used'] ?? data['premium_requests_used'] ?? 0
+      data['monthly_requests_used'] ?? data['premium_requests_used'] ??
+      data['ai_credits_used'] ?? data['credits_used'] ?? 0
     )
     const remaining = Number(
       data['remaining_requests'] ?? data['quota_remaining'] ??
-      data['premium_requests_remaining'] ?? 0
+      data['premium_requests_remaining'] ??
+      data['ai_credits_remaining'] ?? data['credits_remaining'] ?? 0
     )
 
     if (limit > 0) {

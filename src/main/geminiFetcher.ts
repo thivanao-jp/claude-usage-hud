@@ -215,18 +215,25 @@ export class GeminiFetcher {
     }
   }
 
+  /**
+   * modelId の完全一致ではなく "pro"/"flash" を含むかで判定する。
+   * Gemini CLI は 2.5 → 3(.1) 系へ default モデルが移行しており
+   * （gemini-3-pro-preview 等）、バケットに複数世代が同時に載ることがあるため、
+   * 残量が最も少ない（＝実際に消費されている）バケットを採用する。
+   */
   private parseBuckets(buckets: QuotaBucket[]): GeminiUsageData {
-    const find = (id: string): GeminiModelData | null => {
-      const b = buckets.find(b => b.modelId === id)
-      if (!b) return null
+    const findByCategory = (category: 'pro' | 'flash'): GeminiModelData | null => {
+      const matches = buckets.filter(b => b.modelId.toLowerCase().includes(category))
+      if (matches.length === 0) return null
+      const b = matches.reduce((min, cur) => cur.remainingFraction < min.remainingFraction ? cur : min)
       return {
         remainingPct: Math.round(b.remainingFraction * 100),
         resetTime: b.resetTime ?? null,
       }
     }
     return {
-      pro: find('gemini-2.5-pro'),
-      flash: find('gemini-2.5-flash'),
+      pro: findByCategory('pro'),
+      flash: findByCategory('flash'),
     }
   }
 

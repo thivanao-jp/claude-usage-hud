@@ -1,8 +1,8 @@
 {
   "_meta": {
     "source": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
-    "fetchedAt": "2026-06-11",
-    "note": "前方一致でモデル名とマッチ。各値は $ per token。cw1h が無い旧モデルは cw5m * 1.6 を概算値として使用。"
+    "fetchedAt": "2026-07-02",
+    "note": "前方一致でモデル名とマッチ。各値は $ per token（sticker価格。Sonnet 5は2026-08-31まで$2/$10のintro価格が別途あるが未反映）。cw1h が無い旧モデルは cw5m * 1.6 を概算値として使用。"
   },
   "models": {
     "claude-opus-4-1": {
@@ -60,6 +60,20 @@
       "cw5m": 1.25e-05,
       "cw1h": 2e-05,
       "cr": 1e-06
+    },
+    "claude-mythos-5": {
+      "in": 1e-05,
+      "out": 5e-05,
+      "cw5m": 1.25e-05,
+      "cw1h": 2e-05,
+      "cr": 1e-06
+    },
+    "claude-sonnet-5": {
+      "in": 3e-06,
+      "out": 1.5e-05,
+      "cw5m": 3.75e-06,
+      "cw1h": 6e-06,
+      "cr": 3e-07
     },
     "claude-sonnet-4-6": {
       "in": 3e-06,
