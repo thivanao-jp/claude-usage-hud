@@ -218,14 +218,16 @@ export class GeminiFetcher {
   /**
    * modelId の完全一致ではなく "pro"/"flash" を含むかで判定する。
    * Gemini CLI は 2.5 → 3(.1) 系へ default モデルが移行しており
-   * （gemini-3-pro-preview 等）、バケットに複数世代が同時に載ることがあるため、
-   * 残量が最も少ない（＝実際に消費されている）バケットを採用する。
+   * （gemini-3-pro-preview 等）、バケットに複数世代が同時に載ることがある。
+   * その場合は modelId の文字列比較で最も新しい世代（例: gemini-3.1 > gemini-3 > gemini-2.5）
+   * を優先する。残量の多寡で選ぶと、CLIが実際には使っていない旧世代の枯渇バケットを
+   * 誤って採用してしまうため。
    */
   private parseBuckets(buckets: QuotaBucket[]): GeminiUsageData {
     const findByCategory = (category: 'pro' | 'flash'): GeminiModelData | null => {
       const matches = buckets.filter(b => b.modelId.toLowerCase().includes(category))
       if (matches.length === 0) return null
-      const b = matches.reduce((min, cur) => cur.remainingFraction < min.remainingFraction ? cur : min)
+      const b = matches.reduce((newest, cur) => cur.modelId > newest.modelId ? cur : newest)
       return {
         remainingPct: Math.round(b.remainingFraction * 100),
         resetTime: b.resetTime ?? null,

@@ -12,6 +12,15 @@ export interface CodexUsageData {
 
 export type CodexLoginStatus = 'logged-in' | 'logged-out' | 'unknown'
 
+/** reset_at (epoch秒) が無い場合は reset_after_seconds (相対秒数) から算出する */
+function computeResetDate(win: Record<string, unknown>): string | null {
+  const resetAt = win['reset_at'] ? Number(win['reset_at']) : 0
+  if (resetAt > 0) return new Date(resetAt * 1000).toISOString()
+  const resetAfterSeconds = win['reset_after_seconds'] ? Number(win['reset_after_seconds']) : 0
+  if (resetAfterSeconds > 0) return new Date(Date.now() + resetAfterSeconds * 1000).toISOString()
+  return null
+}
+
 /**
  * [β] OpenAI Codex Cloud の使用量を取得する。
  *
@@ -151,15 +160,9 @@ export class CodexFetcher {
         if (!w || typeof w !== 'object') return null
         const win = w as Record<string, unknown>
         const used = Number(win['used_percent'] ?? win['utilization'] ?? 0)
-        const resetAt = win['reset_at'] ? Number(win['reset_at']) : 0
-        // reset_at (epoch秒) が無い場合は reset_after_seconds (相対秒数) から算出する
-        const resetAfterSeconds = win['reset_after_seconds'] ? Number(win['reset_after_seconds']) : 0
-        const resetDate = resetAt > 0
-          ? new Date(resetAt * 1000).toISOString()
-          : (resetAfterSeconds > 0 ? new Date(Date.now() + resetAfterSeconds * 1000).toISOString() : null)
         return {
           utilization: Math.min(used, 100),
-          resetDate,
+          resetDate: computeResetDate(win),
         }
       }
       // wham では five_hour / seven_day キーを使う場合がある
@@ -266,14 +269,9 @@ export class CodexFetcher {
         if (!w || typeof w !== 'object') return null
         const win = w as Record<string, unknown>
         const usedPct = Number(win['used_percent'] ?? 0)
-        const resetAt = Number(win['reset_at'] ?? 0)
-        const resetAfterSeconds = Number(win['reset_after_seconds'] ?? 0)
-        const resetDate = resetAt > 0
-          ? new Date(resetAt * 1000).toISOString()
-          : (resetAfterSeconds > 0 ? new Date(Date.now() + resetAfterSeconds * 1000).toISOString() : null)
         return {
           utilization: Math.min(usedPct, 100),
-          resetDate,
+          resetDate: computeResetDate(win),
         }
       }
 
