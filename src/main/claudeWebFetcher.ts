@@ -21,6 +21,8 @@ export class ClaudeWebFetcher {
   private statusChangeCallback: ((status: LoginStatus) => void) | null = null
   private orgUuidChangedCallback: ((uuid: string) => void) | null = null
   private logCallback: ((...args: unknown[]) => void) | null = null
+  private rawUsageLoggedOnce = false
+  private loggedUnknownModelNames = new Set<string>()
 
   setStatusChangeCallback(cb: (status: LoginStatus) => void): void {
     this.statusChangeCallback = cb
@@ -241,10 +243,49 @@ export class ClaudeWebFetcher {
     const profile = mapProfile(raw.account, raw.orgUuid)
 
     // プラン診断ログ（Team/Enterprise など非標準プランのデバッグ用）
-    this.log('fetchData: rate_limit_tier=', (raw.account as Record<string, unknown>)?.['rate_limit_tier'])
-    this.log('fetchData: raw_usage=', JSON.stringify(raw.usage, null, 2))
+    // 毎ポーリング（デフォルト1分間隔）でフルダンプするとログファイルが際限なく肥大化するため、
+    // セッション中1回だけ出す。それ以降は未知のフィールド／モデル名が現れた時だけ差分を記録する。
+    if (!this.rawUsageLoggedOnce) {
+      this.rawUsageLoggedOnce = true
+      this.log('fetchData: rate_limit_tier=', (raw.account as Record<string, unknown>)?.['rate_limit_tier'])
+      this.log('fetchData: raw_usage=', JSON.stringify(raw.usage, null, 2))
+    } else {
+      this.logUnknownUsageShapes(raw.usage)
+    }
 
     return { usage, profile, loginStatus: 'logged-in' }
+  }
+
+  /** 未知のトップレベルフィールドや limits[] のモデル名が現れたら一度だけ記録する（フルダンプはしない） */
+  private logUnknownUsageShapes(raw: unknown): void {
+    if (!raw || typeof raw !== 'object') return
+    const r = raw as Record<string, unknown>
+    const src = (r['utilization'] && typeof r['utilization'] === 'object')
+      ? r['utilization'] as Record<string, unknown>
+      : r
+
+    for (const key of Object.keys(src)) {
+      const tag = `field:${key}`
+      if (!KNOWN_USAGE_KEYS.has(key) && !this.loggedUnknownModelNames.has(tag)) {
+        this.loggedUnknownModelNames.add(tag)
+        this.log('fetchData: unknown usage field detected:', key, JSON.stringify(src[key]))
+      }
+    }
+
+    const limits = r['limits']
+    if (!Array.isArray(limits)) return
+    for (const item of limits) {
+      if (!item || typeof item !== 'object') continue
+      const scope = (item as Record<string, unknown>)['scope']
+      const model = (scope && typeof scope === 'object') ? (scope as Record<string, unknown>)['model'] : null
+      const displayName = (model && typeof model === 'object') ? (model as Record<string, unknown>)['display_name'] : null
+      const name = displayName != null ? String(displayName) : null
+      const tag = `model:${name}`
+      if (name && !MODEL_DISPLAY_TO_KEY[name] && !this.loggedUnknownModelNames.has(tag)) {
+        this.loggedUnknownModelNames.add(tag)
+        this.log('fetchData: unknown limits[] model display_name detected:', name)
+      }
+    }
   }
 
   /** Settings からログインウィンドウを開く */
@@ -289,6 +330,46 @@ function entry(src: Record<string, unknown>, key: string) {
   return { utilization, resets_at }
 }
 
+// モデル別週次制限は seven_day_* のフラットフィールドではなく、
+// limits[] 配列内の scope.model.display_name で返ってくる場合がある（2026-07時点で Fable 確認）
+const MODEL_DISPLAY_TO_KEY: Record<string, string> = {
+  Fable: 'seven_day_fable',
+  Opus: 'seven_day_opus',
+  Sonnet: 'seven_day_sonnet',
+}
+
+// mapUsage が認識済みのトップレベルフィールド一覧（未知フィールド検出用）
+const KNOWN_USAGE_KEYS = new Set([
+  'five_hour', 'seven_day', 'seven_day_oauth_apps', 'seven_day_opus', 'seven_day_fable',
+  'seven_day_sonnet', 'seven_day_cowork', 'seven_day_omelette', 'iguana_necktie',
+  'omelette_promotional', 'cinder_cove', 'tangelo', 'nimbus_quill', 'amber_ladder',
+  'extra_usage', 'limits', 'spend', 'member_dashboard_available',
+])
+
+function entriesFromLimits(limits: unknown): Record<string, { utilization: number; resets_at: string | null }> {
+  const out: Record<string, { utilization: number; resets_at: string | null }> = {}
+  if (!Array.isArray(limits)) return out
+
+  for (const item of limits) {
+    if (!item || typeof item !== 'object') continue
+    const l = item as Record<string, unknown>
+    const utilization = Number(l['percent'] ?? 0)
+    const resets_at = (l['resets_at'] ?? null) as string | null
+    const scope = (l['scope'] && typeof l['scope'] === 'object') ? l['scope'] as Record<string, unknown> : null
+    const model = (scope?.['model'] && typeof scope['model'] === 'object') ? scope['model'] as Record<string, unknown> : null
+    const displayName = model?.['display_name'] != null ? String(model['display_name']) : null
+
+    if (displayName && MODEL_DISPLAY_TO_KEY[displayName]) {
+      out[MODEL_DISPLAY_TO_KEY[displayName]] = { utilization, resets_at }
+    } else if (l['kind'] === 'session') {
+      out['five_hour'] = { utilization, resets_at }
+    } else if (l['kind'] === 'weekly_all') {
+      out['seven_day'] = { utilization, resets_at }
+    }
+  }
+  return out
+}
+
 function mapUsage(raw: unknown): UsageData | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
@@ -316,18 +397,24 @@ function mapUsage(raw: unknown): UsageData | null {
     }
   }
 
+  // limits[] 配列由来のモデル別スコープ値をフラットフィールドが null のときのフォールバックとして使う
+  const fromLimits = entriesFromLimits(r['limits'])
+
   const result: UsageData = {
-    five_hour: entry(src, 'five_hour'),
-    seven_day: entry(src, 'seven_day'),
+    five_hour: entry(src, 'five_hour') ?? fromLimits['five_hour'] ?? null,
+    seven_day: entry(src, 'seven_day') ?? fromLimits['seven_day'] ?? null,
     seven_day_oauth_apps: entry(src, 'seven_day_oauth_apps'),
-    seven_day_opus: entry(src, 'seven_day_opus'),
-    seven_day_fable: entry(src, 'seven_day_fable'),
-    seven_day_sonnet: entry(src, 'seven_day_sonnet'),
+    seven_day_opus: entry(src, 'seven_day_opus') ?? fromLimits['seven_day_opus'] ?? null,
+    seven_day_fable: entry(src, 'seven_day_fable') ?? fromLimits['seven_day_fable'] ?? null,
+    seven_day_sonnet: entry(src, 'seven_day_sonnet') ?? fromLimits['seven_day_sonnet'] ?? null,
     seven_day_cowork: entry(src, 'seven_day_cowork'),
     seven_day_omelette: entry(src, 'seven_day_omelette'),
     iguana_necktie: entry(src, 'iguana_necktie'),
     omelette_promotional: entry(src, 'omelette_promotional'),
     cinder_cove: entry(src, 'cinder_cove'),
+    tangelo: entry(src, 'tangelo'),
+    nimbus_quill: entry(src, 'nimbus_quill'),
+    amber_ladder: entry(src, 'amber_ladder'),
     extra_usage,
   }
 

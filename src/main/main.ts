@@ -10,7 +10,7 @@ import {
   screen
 } from 'electron'
 import { join } from 'path'
-import { appendFileSync, mkdirSync } from 'fs'
+import { appendFileSync, mkdirSync, statSync, renameSync } from 'fs'
 import { createServer as createHttpServer, IncomingMessage, ServerResponse } from 'http'
 import { is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
@@ -31,7 +31,13 @@ import { pollCcUsage, getCcPaceData, getBootstrapEstimate, CcPaceData, HistoryPo
 // macOS: ~/Library/Logs/<appName>/  Windows: %APPDATA%\<appName>\logs\
 const LOG_DIR = app.getPath('logs')
 const LOG_PATH = join(LOG_DIR, 'claude-usage-hud.log')
+const LOG_MAX_BYTES = 5 * 1024 * 1024 // 5MB を超えたら起動時にローテーション
 try { mkdirSync(LOG_DIR, { recursive: true }) } catch {}
+try {
+  if (statSync(LOG_PATH).size > LOG_MAX_BYTES) {
+    renameSync(LOG_PATH, `${LOG_PATH}.old`)
+  }
+} catch {}
 function log(...args: unknown[]): void {
   const line = `[${new Date().toISOString()}] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}\n`
   try { appendFileSync(LOG_PATH, line) } catch {}

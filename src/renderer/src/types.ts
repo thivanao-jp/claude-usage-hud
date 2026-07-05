@@ -23,6 +23,9 @@ export interface UsageData {
   iguana_necktie: UsageEntry | null
   omelette_promotional: UsageEntry | null
   cinder_cove: UsageEntry | null
+  tangelo: UsageEntry | null
+  nimbus_quill: UsageEntry | null
+  amber_ladder: UsageEntry | null
   extra_usage: ExtraUsage | null
 }
 
@@ -152,6 +155,9 @@ export interface HistoryRow {
   iguana_necktie: number | null
   omelette_promotional: number | null
   cinder_cove: number | null
+  tangelo: number | null
+  nimbus_quill: number | null
+  amber_ladder: number | null
   extra_usage: number | null
 }
 
