@@ -33,11 +33,6 @@ const LOG_DIR = app.getPath('logs')
 const LOG_PATH = join(LOG_DIR, 'claude-usage-hud.log')
 const LOG_MAX_BYTES = 5 * 1024 * 1024 // 5MB を超えたら起動時にローテーション
 try { mkdirSync(LOG_DIR, { recursive: true }) } catch {}
-try {
-  if (statSync(LOG_PATH).size > LOG_MAX_BYTES) {
-    renameSync(LOG_PATH, `${LOG_PATH}.old`)
-  }
-} catch {}
 function log(...args: unknown[]): void {
   const line = `[${new Date().toISOString()}] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}\n`
   try { appendFileSync(LOG_PATH, line) } catch {}
@@ -838,6 +833,13 @@ const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
 } else {
+  // シングルインスタンスロック確定後に実行（二重起動時の敗者プロセスによるレースを避ける）
+  try {
+    if (statSync(LOG_PATH).size > LOG_MAX_BYTES) {
+      renameSync(LOG_PATH, `${LOG_PATH}.old`)
+    }
+  } catch {}
+
   app.on('second-instance', () => {
     if (hudWindow && !hudWindow.isDestroyed()) {
       hudWindow.show()

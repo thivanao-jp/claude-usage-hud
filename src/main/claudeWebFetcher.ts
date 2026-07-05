@@ -22,6 +22,7 @@ export class ClaudeWebFetcher {
   private orgUuidChangedCallback: ((uuid: string) => void) | null = null
   private logCallback: ((...args: unknown[]) => void) | null = null
   private rawUsageLoggedOnce = false
+  private loggedUnknownFields = new Set<string>()
   private loggedUnknownModelNames = new Set<string>()
 
   setStatusChangeCallback(cb: (status: LoginStatus) => void): void {
@@ -237,6 +238,8 @@ export class ClaudeWebFetcher {
     if (raw.orgUuid !== this.orgUuid) {
       this.orgUuid = raw.orgUuid
       this.orgUuidChangedCallback?.(raw.orgUuid)
+      // 組織切り替え時はキャッシュ済み orgUuid の有無によらず状況が変わるため、フルダンプを取り直す
+      this.rawUsageLoggedOnce = false
     }
 
     const usage = mapUsage(raw.usage)
@@ -245,9 +248,13 @@ export class ClaudeWebFetcher {
     // プラン診断ログ（Team/Enterprise など非標準プランのデバッグ用）
     // 毎ポーリング（デフォルト1分間隔）でフルダンプするとログファイルが際限なく肥大化するため、
     // セッション中1回だけ出す。それ以降は未知のフィールド／モデル名が現れた時だけ差分を記録する。
+    // rate_limit_tier はキャッシュ済み orgUuid 経由の高速パスでは account が null になり取得できないため、
+    // raw_usage ダンプの成否とは独立に、account が取れたタイミングでその都度記録する。
+    if (raw.account) {
+      this.log('fetchData: rate_limit_tier=', (raw.account as Record<string, unknown>)?.['rate_limit_tier'])
+    }
     if (!this.rawUsageLoggedOnce) {
       this.rawUsageLoggedOnce = true
-      this.log('fetchData: rate_limit_tier=', (raw.account as Record<string, unknown>)?.['rate_limit_tier'])
       this.log('fetchData: raw_usage=', JSON.stringify(raw.usage, null, 2))
     } else {
       this.logUnknownUsageShapes(raw.usage)
@@ -265,9 +272,8 @@ export class ClaudeWebFetcher {
       : r
 
     for (const key of Object.keys(src)) {
-      const tag = `field:${key}`
-      if (!KNOWN_USAGE_KEYS.has(key) && !this.loggedUnknownModelNames.has(tag)) {
-        this.loggedUnknownModelNames.add(tag)
+      if (!KNOWN_USAGE_KEYS.has(key) && !this.loggedUnknownFields.has(key)) {
+        this.loggedUnknownFields.add(key)
         this.log('fetchData: unknown usage field detected:', key, JSON.stringify(src[key]))
       }
     }
@@ -280,10 +286,10 @@ export class ClaudeWebFetcher {
       const model = (scope && typeof scope === 'object') ? (scope as Record<string, unknown>)['model'] : null
       const displayName = (model && typeof model === 'object') ? (model as Record<string, unknown>)['display_name'] : null
       const name = displayName != null ? String(displayName) : null
-      const tag = `model:${name}`
-      if (name && !MODEL_DISPLAY_TO_KEY[name] && !this.loggedUnknownModelNames.has(tag)) {
-        this.loggedUnknownModelNames.add(tag)
-        this.log('fetchData: unknown limits[] model display_name detected:', name)
+      if (name && !MODEL_DISPLAY_TO_KEY[name] && !this.loggedUnknownModelNames.has(name)) {
+        this.loggedUnknownModelNames.add(name)
+        // フルダンプは既に終わっているため、未対応モデルの item 自体を記録して後からマッピングを追加できるようにする
+        this.log('fetchData: unknown limits[] model display_name detected:', name, JSON.stringify(item))
       }
     }
   }
@@ -359,11 +365,13 @@ function entriesFromLimits(limits: unknown): Record<string, { utilization: numbe
     const model = (scope?.['model'] && typeof scope['model'] === 'object') ? scope['model'] as Record<string, unknown> : null
     const displayName = model?.['display_name'] != null ? String(model['display_name']) : null
 
-    if (displayName && MODEL_DISPLAY_TO_KEY[displayName]) {
+    // モデルスコープ付き（weekly_scoped）のみモデル別キーへ。session/weekly_all はスコープなし（全体集計）の場合だけ拾う。
+    // kind とスコープ有無を両方見ないと、将来 kind が重複した場合に誤った値で上書きされる恐れがある。
+    if (displayName && l['kind'] === 'weekly_scoped' && MODEL_DISPLAY_TO_KEY[displayName]) {
       out[MODEL_DISPLAY_TO_KEY[displayName]] = { utilization, resets_at }
-    } else if (l['kind'] === 'session') {
+    } else if (!displayName && l['kind'] === 'session') {
       out['five_hour'] = { utilization, resets_at }
-    } else if (l['kind'] === 'weekly_all') {
+    } else if (!displayName && l['kind'] === 'weekly_all') {
       out['seven_day'] = { utilization, resets_at }
     }
   }
