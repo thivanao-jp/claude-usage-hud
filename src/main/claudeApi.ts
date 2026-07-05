@@ -26,6 +26,9 @@ export interface UsageData {
   iguana_necktie: UsageEntry | null
   omelette_promotional: UsageEntry | null
   cinder_cove: UsageEntry | null
+  tangelo: UsageEntry | null
+  nimbus_quill: UsageEntry | null
+  amber_ladder: UsageEntry | null
   extra_usage: ExtraUsage | null
 }
 

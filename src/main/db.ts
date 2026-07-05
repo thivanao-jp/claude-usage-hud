@@ -49,14 +49,23 @@ function db(): Database.Database {
   if (!cols.includes('cinder_cove')) {
     _db.exec('ALTER TABLE usage_history ADD COLUMN cinder_cove REAL;')
   }
+  if (!cols.includes('tangelo')) {
+    _db.exec('ALTER TABLE usage_history ADD COLUMN tangelo REAL;')
+  }
+  if (!cols.includes('nimbus_quill')) {
+    _db.exec('ALTER TABLE usage_history ADD COLUMN nimbus_quill REAL;')
+  }
+  if (!cols.includes('amber_ladder')) {
+    _db.exec('ALTER TABLE usage_history ADD COLUMN amber_ladder REAL;')
+  }
   return _db
 }
 
 export function saveUsageHistory(usage: UsageData): void {
   db()
     .prepare(
-      `INSERT INTO usage_history (five_hour, seven_day, seven_day_oauth_apps, seven_day_opus, seven_day_fable, seven_day_sonnet, seven_day_cowork, seven_day_omelette, iguana_necktie, omelette_promotional, cinder_cove, extra_usage)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO usage_history (five_hour, seven_day, seven_day_oauth_apps, seven_day_opus, seven_day_fable, seven_day_sonnet, seven_day_cowork, seven_day_omelette, iguana_necktie, omelette_promotional, cinder_cove, tangelo, nimbus_quill, amber_ladder, extra_usage)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       usage.five_hour?.utilization ?? null,
@@ -70,6 +79,9 @@ export function saveUsageHistory(usage: UsageData): void {
       usage.iguana_necktie?.utilization ?? null,
       usage.omelette_promotional?.utilization ?? null,
       usage.cinder_cove?.utilization ?? null,
+      usage.tangelo?.utilization ?? null,
+      usage.nimbus_quill?.utilization ?? null,
+      usage.amber_ladder?.utilization ?? null,
       usage.extra_usage?.utilization ?? null
     )
 }
@@ -87,13 +99,16 @@ export interface HistoryRow {
   iguana_necktie: number | null
   omelette_promotional: number | null
   cinder_cove: number | null
+  tangelo: number | null
+  nimbus_quill: number | null
+  amber_ladder: number | null
   extra_usage: number | null
 }
 
 export function getUsageHistory(days: number): HistoryRow[] {
   return db()
     .prepare(
-      `SELECT recorded_at, five_hour, seven_day, seven_day_oauth_apps, seven_day_opus, seven_day_fable, seven_day_sonnet, seven_day_cowork, seven_day_omelette, iguana_necktie, omelette_promotional, cinder_cove, extra_usage
+      `SELECT recorded_at, five_hour, seven_day, seven_day_oauth_apps, seven_day_opus, seven_day_fable, seven_day_sonnet, seven_day_cowork, seven_day_omelette, iguana_necktie, omelette_promotional, cinder_cove, tangelo, nimbus_quill, amber_ladder, extra_usage
        FROM usage_history
        WHERE recorded_at >= datetime('now', ?)
        ORDER BY recorded_at ASC`

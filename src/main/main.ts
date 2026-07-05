@@ -10,7 +10,7 @@ import {
   screen
 } from 'electron'
 import { join } from 'path'
-import { appendFileSync, mkdirSync } from 'fs'
+import { appendFileSync, mkdirSync, statSync, renameSync } from 'fs'
 import { createServer as createHttpServer, IncomingMessage, ServerResponse } from 'http'
 import { is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
@@ -31,6 +31,7 @@ import { pollCcUsage, getCcPaceData, getBootstrapEstimate, CcPaceData, HistoryPo
 // macOS: ~/Library/Logs/<appName>/  Windows: %APPDATA%\<appName>\logs\
 const LOG_DIR = app.getPath('logs')
 const LOG_PATH = join(LOG_DIR, 'claude-usage-hud.log')
+const LOG_MAX_BYTES = 5 * 1024 * 1024 // 5MB を超えたら起動時にローテーション
 try { mkdirSync(LOG_DIR, { recursive: true }) } catch {}
 function log(...args: unknown[]): void {
   const line = `[${new Date().toISOString()}] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}\n`
@@ -832,6 +833,13 @@ const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
 } else {
+  // シングルインスタンスロック確定後に実行（二重起動時の敗者プロセスによるレースを避ける）
+  try {
+    if (statSync(LOG_PATH).size > LOG_MAX_BYTES) {
+      renameSync(LOG_PATH, `${LOG_PATH}.old`)
+    }
+  } catch {}
+
   app.on('second-instance', () => {
     if (hudWindow && !hudWindow.isDestroyed()) {
       hudWindow.show()
