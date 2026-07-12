@@ -5,7 +5,7 @@
 
 import { deflateSync } from 'zlib'
 import { nativeImage, NativeImage } from 'electron'
-import { UsageData, UsageEntry } from './claudeApi'
+import { UsageData, UsageEntry, CodexUsageData } from './claudeApi'
 import { Settings } from './settings'
 import { WEEKLY_FIELD_DEFS } from './fieldDefs'
 
@@ -76,7 +76,8 @@ function hexToRgb(hex: string): RGB {
 export function createBarIcon(
   usage: UsageData,
   settings: Settings,
-  isStale: boolean
+  isStale: boolean,
+  codex: CodexUsageData | null = null,
 ): NativeImage {
   type Bar = { pct: number; color: RGB }
   const bars: Bar[] = []
@@ -94,6 +95,12 @@ export function createBarIcon(
       const entry = usageRecord[field.key]
       addRgb(entry?.utilization, hexToRgb(field.color))
     }
+  }
+  if (settings.codex?.enabled && settings.tray.showCodexPrimary && codex?.fiveHourUtilization != null) {
+    addRgb(codex.fiveHourUtilization, [16, 163, 127])
+  }
+  if (settings.codex?.enabled && settings.tray.showCodexSecondary && (codex?.secondaryWindowMinutes != null || codex?.fiveHourUtilization == null) && codex) {
+    addRgb(codex.utilization, [16, 163, 127])
   }
 
   if (bars.length === 0) return nativeImage.createEmpty()
