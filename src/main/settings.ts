@@ -19,6 +19,8 @@ export interface Settings {
     show5h: boolean
     showExtra: boolean
     showFields: Record<string, boolean>  // key = WeeklyFieldDef.key
+    showCodexPrimary?: boolean
+    showCodexSecondary?: boolean
     // deprecated (migration用、削除しない)
     show7d?: boolean
     showOauth?: boolean
@@ -47,9 +49,8 @@ export interface Settings {
   }
   betaProviders?: {
     copilot?: { enabled: boolean }
-    codex?: { enabled: boolean }
-    gemini?: { enabled: boolean }
   }
+  codex?: { enabled: boolean }
   /** cc-pace-meter: 5h枠の推定上限のキャリブレーション結果（直近の信頼できる値を永続化） */
   ccPaceCalibration?: {
     estimatedLimitTokens: number
@@ -83,6 +84,8 @@ const defaultSettings: Settings = {
       iguana_necktie: false,
       omelette_promotional: false,
     },
+    showCodexPrimary: true,
+    showCodexSecondary: true,
   },
   window: {
     opacity: 90,
@@ -96,6 +99,7 @@ const defaultSettings: Settings = {
     workDayEnd: 22,
     excludeWeekends: true,
   },
+  codex: { enabled: false },
 }
 
 function settingsPath(): string {
@@ -131,6 +135,8 @@ export function loadSettings(): Settings {
         omelette_promotional: false,
       }
     }
+    // v1.0: Codex はβプロバイダーから正式プロバイダー設定へ移行する。
+    if (!saved.codex && saved.betaProviders?.codex) merged.codex = saved.betaProviders.codex
     return merged
   } catch {
     return { ...defaultSettings }

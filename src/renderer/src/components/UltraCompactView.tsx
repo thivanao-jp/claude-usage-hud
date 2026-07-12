@@ -1,6 +1,13 @@
 import { useEffect } from 'react'
 import { UsageData, Settings, UsageEntry, BetaProvidersData, CcPaceData } from '../types'
 import { useTheme } from '../ThemeContext'
+
+function formatCodexWindow(minutes: number | null): string {
+  if (minutes == null) return '%'
+  if (minutes % (24 * 60) === 0) return `${minutes / (24 * 60)}d`
+  if (minutes % 60 === 0) return `${minutes / 60}h`
+  return `${minutes}m`
+}
 import { calcPacePct } from '../paceUtil'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
 
@@ -63,7 +70,7 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
     const entry = usageRecord?.['five_hour'] ?? null
     barDefs.push({
       key: 'five_hour',
-      label: '5H',
+      label: 'Cl5',
       color: '#4a9eff',
       pct: entry ? Math.min(Math.round(entry.utilization), 100) : 0,
       resetAt: entry?.resets_at ?? null,
@@ -77,7 +84,7 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
       const entry = usageRecord[f.key]!
       barDefs.push({
         key: f.key,
-        label: f.shortLabel,
+        label: `Cl${f.shortLabel}`,
         color: f.color,
         pct: Math.min(Math.round(entry.utilization), 100),
         resetAt: entry.resets_at ?? null,
@@ -90,7 +97,7 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
     const extra = usage.extra_usage
     barDefs.push({
       key: 'extra',
-      label: 'EX',
+      label: 'ClEX',
       color: '#a78bfa',
       pct: Math.min(Math.round(extra.utilization ?? 0), 100),
       resetAt: null,
@@ -102,7 +109,7 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
     const d = beta.copilot
     barDefs.push({
       key: 'copilot',
-      label: 'Cpl',
+      label: 'βCpl',
       color: '#6e9ee8',
       pct: Math.min(Math.round(d.utilization), 100),
       resetAt: d.resetDate ?? null,
@@ -110,57 +117,36 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
     })
   }
 
-  if (settings.betaProviders?.codex?.enabled && beta?.codex) {
+  if (settings.codex?.enabled && beta?.codex) {
     const d = beta.codex
-    if (d.fiveHourUtilization != null) {
+    if ((settings.tray.showCodexPrimary ?? true) && d.fiveHourUtilization != null) {
       barDefs.push({
         key: 'codex5h',
-        label: 'Cx5',
+        label: `Cx${formatCodexWindow(d.primaryWindowMinutes)}`,
         color: '#10a37f',
         pct: Math.min(Math.round(d.fiveHourUtilization), 100),
         resetAt: d.fiveHourResetDate ?? null,
-        periodMs: 5 * HOUR,
+        periodMs: (d.primaryWindowMinutes ?? 5 * 60) * 60_000,
       })
     }
-    barDefs.push({
-      key: 'codex7d',
-      label: 'Cx7',
-      color: '#10a37f',
-      pct: Math.min(Math.round(d.utilization), 100),
-      resetAt: d.resetDate ?? null,
-      periodMs: 7 * DAY,
-    })
-  }
-
-  if (settings.betaProviders?.gemini?.enabled && beta?.gemini) {
-    const g = beta.gemini
-    if (g.pro) {
+    if ((settings.tray.showCodexSecondary ?? true) && (d.secondaryWindowMinutes != null || d.fiveHourUtilization == null)) {
       barDefs.push({
-        key: 'gemini-pro',
-        label: 'GPro',
-        color: '#4285f4',
-        pct: Math.min(Math.round(100 - g.pro.remainingPct), 100),
-        resetAt: g.pro.resetTime ?? null,
-        periodMs: 24 * HOUR,
-      })
-    }
-    if (g.flash) {
-      barDefs.push({
-        key: 'gemini-flash',
-        label: 'GFls',
-        color: '#4285f4',
-        pct: Math.min(Math.round(100 - g.flash.remainingPct), 100),
-        resetAt: g.flash.resetTime ?? null,
-        periodMs: 24 * HOUR,
+        key: 'codex-secondary',
+        label: `Cx${formatCodexWindow(d.secondaryWindowMinutes)}`,
+        color: '#10a37f',
+        pct: Math.min(Math.round(d.utilization), 100),
+        resetAt: d.resetDate ?? null,
+        periodMs: (d.secondaryWindowMinutes ?? 7 * 24 * 60) * 60_000,
       })
     }
   }
+
 
   if (barDefs.length === 0) {
     const entry = usageRecord?.['five_hour'] ?? null
     barDefs.push({
       key: 'five_hour',
-      label: '5H',
+      label: 'Cl5',
       color: '#4a9eff',
       pct: entry ? Math.min(Math.round(entry.utilization), 100) : 0,
       resetAt: entry?.resets_at ?? null,

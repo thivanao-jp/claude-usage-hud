@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { UsageData, Settings, ExtraUsage, UsageEntry, BetaProvidersData, GeminiModelData, CcPaceData } from '../types'
+import { UsageData, Settings, ExtraUsage, UsageEntry, BetaProvidersData, CcPaceData } from '../types'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { calcPacePct } from '../paceUtil'
@@ -46,7 +46,7 @@ interface BarItem {
 const HOUR = 60 * 60 * 1000
 const DAY  = 24 * HOUR
 
-const FIVE_HOUR_BAR: BarItem = { key: 'five_hour', label: '5H', color: '#4a9eff', periodMs: 5 * HOUR }
+const FIVE_HOUR_BAR: BarItem = { key: 'five_hour', label: 'Cl 5H', color: '#4a9eff', periodMs: 5 * HOUR }
 
 interface RelTime {
   major: string
@@ -129,7 +129,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccP
 
   const weeklyBarItems: BarItem[] = WEEKLY_FIELD_DEFS.map(f => ({
     key: f.key,
-    label: f.shortLabel,
+    label: `Cl ${f.shortLabel}`,
     color: f.color,
     periodMs: f.periodMs,
   }))
@@ -344,18 +344,24 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccP
             </div>
           )
         })()}
-        {settings.betaProviders?.codex?.enabled && (() => {
+        {settings.codex?.enabled && (() => {
           const d = beta?.codex ?? null
-          // 5h primary window
+          const windowLabel = (minutes: number | null) => {
+            if (minutes == null) return '%'
+            if (minutes % (24 * 60) === 0) return `${minutes / (24 * 60)}d`
+            if (minutes % 60 === 0) return `${minutes / 60}h`
+            return `${minutes}m`
+          }
+          // Primary / secondary windows are supplied by Codex and can vary by plan.
           const pct5 = d?.fiveHourUtilization != null ? Math.min(Math.round(d.fiveHourUtilization), 100) : 0
           const color5 = pct5 >= 90 ? '#e05a2b' : pct5 >= 70 ? '#e0a12b' : '#10a37f'
           const reset5 = formatReset(d?.fiveHourResetDate ?? null, t('timeNow'))
-          const pace5 = d?.fiveHourResetDate ? calcPacePct(d.fiveHourResetDate, 5 * HOUR, settings.pace) : null
-          // 7d secondary window
+          const pace5 = d?.fiveHourResetDate && d.primaryWindowMinutes ? calcPacePct(d.fiveHourResetDate, d.primaryWindowMinutes * 60_000, settings.pace) : null
+          // Secondary window
           const pct7 = d ? Math.min(Math.round(d.utilization), 100) : 0
           const color7 = pct7 >= 90 ? '#e05a2b' : pct7 >= 70 ? '#e0a12b' : '#10a37f'
           const reset7 = formatReset(d?.resetDate ?? null, t('timeNow'))
-          const pace7 = d?.resetDate ? calcPacePct(d.resetDate, 7 * DAY, settings.pace) : null
+          const pace7 = d?.resetDate && d.secondaryWindowMinutes ? calcPacePct(d.resetDate, d.secondaryWindowMinutes * 60_000, settings.pace) : null
 
           const BetaBar = ({ label, pct, barColor, reset, hasData, pacePct }: {
             label: string; pct: number; barColor: string
@@ -383,49 +389,13 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccP
 
           return (
             <>
-              <BetaBar label="Cdx5β" pct={pct5} barColor={color5} reset={reset5} hasData={d?.fiveHourUtilization != null} pacePct={pace5} />
-              <BetaBar label="Cdx7β" pct={pct7} barColor={color7} reset={reset7} hasData={d != null} pacePct={pace7} />
+              {(settings.tray.showCodexPrimary ?? true) && <BetaBar label={`Cdx ${windowLabel(d?.primaryWindowMinutes ?? null)}`} pct={pct5} barColor={color5} reset={reset5} hasData={d?.fiveHourUtilization != null} pacePct={pace5} />}
+              {(settings.tray.showCodexSecondary ?? true) && (d?.secondaryWindowMinutes != null || d?.fiveHourUtilization == null) && (
+                <BetaBar label={`Cdx ${windowLabel(d?.secondaryWindowMinutes ?? null)}`} pct={pct7} barColor={color7} reset={reset7} hasData={d != null} pacePct={pace7} />
+              )}
             </>
           )
         })()}
-        {settings.betaProviders?.gemini?.enabled && (() => {
-          const g = beta?.gemini ?? null
-          const GeminiBar = ({ label, data }: {
-            label: string; data: GeminiModelData | null
-          }) => {
-            const consumed = data != null ? 100 - data.remainingPct : 0
-            const barColor = consumed >= 90 ? '#e05a2b' : consumed >= 70 ? '#e0a12b' : '#4285f4'
-            const reset = formatReset(data?.resetTime ?? null, t('timeNow'))
-            const pacePct = data?.resetTime ? calcPacePct(data.resetTime, 24 * HOUR, settings.pace) : null
-            return (
-              <div style={{ marginBottom: 4, WebkitAppRegion: barRegion as any }}>
-                <div style={{ position: 'relative', height: 28, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
-                  <div style={{ position: 'absolute', inset: 0, width: `${consumed}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
-                  <div style={barTextStyle}>
-                    <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>{label}</span>
-                    <span style={{ width: 72, flexShrink: 0 }}>{data ? reset.date : '—'}</span>
-                    <span style={{ width: 44, flexShrink: 0 }}>{data ? reset.time : ''}</span>
-                    <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{data ? reset.rel.major : ''}</span>
-                    <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{data ? reset.rel.minor : ''}</span>
-                    <span style={{ flex: 1, textAlign: 'right' }}>{data ? `${consumed}%` : '—'}</span>
-                  </div>
-                </div>
-                {pacePct != null && (
-                  <div style={{ height: 3, borderRadius: 1, background: th.bgBar, marginTop: 1, overflow: 'hidden' }}>
-                    <div style={{ width: `${pacePct}%`, height: '100%', background: th.textMuted, borderRadius: 1, opacity: 0.5, transition: 'width 0.4s ease' }} />
-                  </div>
-                )}
-              </div>
-            )
-          }
-          return (
-            <>
-              <GeminiBar label="Gmn Proβ" data={g?.pro ?? null} />
-              <GeminiBar label="Gmn Flsβ" data={g?.flash ?? null} />
-            </>
-          )
-        })()}
-
       </div>
     </div>
   )

@@ -45,11 +45,8 @@ contextBridge.exposeInMainWorld('api', {
   getBetaData: () => ipcRenderer.invoke('get-beta-data'),
   getCopilotLoginStatus: () => ipcRenderer.invoke('get-copilot-login-status'),
   getCodexLoginStatus: () => ipcRenderer.invoke('get-codex-login-status'),
-  getGeminiLoginStatus: () => ipcRenderer.invoke('get-gemini-login-status'),
   showCopilotLoginWindow: () => ipcRenderer.invoke('show-copilot-login-window'),
   hideCopilotLoginWindow: () => ipcRenderer.invoke('hide-copilot-login-window'),
   showCodexLoginWindow: () => ipcRenderer.invoke('show-codex-login-window'),
   hideCodexLoginWindow: () => ipcRenderer.invoke('hide-codex-login-window'),
-  showGeminiLoginWindow: () => ipcRenderer.invoke('show-gemini-login-window'),
-  hideGeminiLoginWindow: () => ipcRenderer.invoke('hide-gemini-login-window'),
 })

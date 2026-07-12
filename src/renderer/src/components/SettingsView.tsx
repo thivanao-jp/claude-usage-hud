@@ -31,6 +31,7 @@ const defaultSettings: Settings = {
   window: { opacity: 90, alwaysOnTop: true },
   alerts: {},
   pace: { workHoursOnly: false, workDayStart: 5, workDayEnd: 22, excludeWeekends: true },
+  codex: { enabled: false },
 }
 
 interface Props {
@@ -49,7 +50,6 @@ export function SettingsView({ onSettingsChange }: Props) {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
   const [copilotStatus, setCopilotStatus] = useState<ProviderStatus>('unknown')
   const [codexStatus, setCodexStatus] = useState<ProviderStatus>('unknown')
-  const [geminiStatus, setGeminiStatus] = useState<ProviderStatus>('unknown')
 
   useEffect(() => {
     window.api.getSettings().then(setS)
@@ -58,7 +58,6 @@ export function SettingsView({ onSettingsChange }: Props) {
     window.api.getAppVersion().then(setAppVersion)
     window.api.getCopilotLoginStatus().then(setCopilotStatus)
     window.api.getCodexLoginStatus().then(setCodexStatus)
-    window.api.getGeminiLoginStatus().then(setGeminiStatus)
     const offLogin = window.api.onLoginStatusChanged(status => setLoginStatus(status))
     const offUpdate = window.api.onUpdateStatus(status => setUpdateStatus(status as UpdateStatus))
     return () => { offLogin(); offUpdate() }
@@ -129,6 +128,31 @@ export function SettingsView({ onSettingsChange }: Props) {
           </button>
         </div>
         <div style={{ fontSize: 11, color: th.textFaint2 }}>{t('loginHint')}</div>
+
+        <div style={{ borderTop: `1px solid ${th.borderSection}`, marginTop: 12, paddingTop: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, marginBottom: 6 }}>OpenAI Codex</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <CheckRow label={t('betaCodexLabel')} checked={s.codex?.enabled ?? false} onChange={v => upd(p => ({ ...p, codex: { enabled: v } }))} th={th} />
+            <StatusDot status={codexStatus} t={t} />
+            <button onClick={() => window.api.showCodexLoginWindow()} style={{ ...secondaryBtn, marginLeft: 'auto', fontSize: 11 }}>{t('betaLoginBtn')}</button>
+          </div>
+          <div style={{ fontSize: 11, color: th.textFaint2, paddingLeft: 20 }}>{t('betaCodexDesc')}</div>
+        </div>
+
+        <div style={{ borderTop: `1px solid ${th.borderSection}`, marginTop: 12, paddingTop: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, marginBottom: 6 }}>GitHub Copilot <span style={{ color: '#e0a12b' }}>β</span></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <CheckRow
+              label={t('betaCopilotLabel')}
+              checked={s.betaProviders?.copilot?.enabled ?? false}
+              onChange={v => upd(p => ({ ...p, betaProviders: { ...p.betaProviders, copilot: { enabled: v } } }))}
+              th={th}
+            />
+            <StatusDot status={copilotStatus} t={t} />
+            <button onClick={() => window.api.showCopilotLoginWindow()} style={{ ...secondaryBtn, marginLeft: 'auto', fontSize: 11 }}>{t('betaLoginBtn')}</button>
+          </div>
+          <div style={{ fontSize: 11, color: th.textFaint2, paddingLeft: 20 }}>{t('betaCopilotDesc')}</div>
+        </div>
       </Section>
 
       {/* Appearance (Theme) */}
@@ -159,7 +183,7 @@ export function SettingsView({ onSettingsChange }: Props) {
 
       {/* Tray display */}
       <Section title={t('sectionTray')} th={th}>
-        <Label th={th}>{t('showInTray')}</Label>
+        <Label th={th}>Claude — {t('showInTray')}</Label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <CheckRow label={t('show5h')} checked={s.tray.show5h} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, show5h: v } }))} th={th} />
           {WEEKLY_FIELD_DEFS.map(field => {
@@ -190,6 +214,11 @@ export function SettingsView({ onSettingsChange }: Props) {
             )
           })}
           <CheckRow label={t('showExtra')} checked={s.tray.showExtra ?? false} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showExtra: v } }))} th={th} />
+        </div>
+        <Label th={th}>Codex — {t('showInTray')}</Label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <CheckRow label={t('codexPrimary')} checked={s.tray.showCodexPrimary ?? true} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showCodexPrimary: v } }))} th={th} />
+          <CheckRow label={t('codexSecondary')} checked={s.tray.showCodexSecondary ?? true} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showCodexSecondary: v } }))} th={th} />
         </div>
       </Section>
 
@@ -254,6 +283,7 @@ export function SettingsView({ onSettingsChange }: Props) {
 
       {/* Alerts */}
       <Section title={t('sectionAlerts')} th={th}>
+        <Label th={th}>Claude</Label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <AlertThreshold
             label={`${t('alertLabel5h')} ${t('alertsPct')}`}
@@ -285,6 +315,11 @@ export function SettingsView({ onSettingsChange }: Props) {
             inputStyle={inputStyle}
             th={th}
           />
+        </div>
+        <Label th={th}>Codex</Label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <AlertThreshold label={`${t('codexPrimary')} ${t('alertsPct')}`} value={s.alerts['codex_primary']} onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, codex_primary: v } }))} inputStyle={inputStyle} th={th} />
+          <AlertThreshold label={`${t('codexSecondary')} ${t('alertsPct')}`} value={s.alerts['codex_secondary']} onChange={v => upd(p => ({ ...p, alerts: { ...p.alerts, codex_secondary: v } }))} inputStyle={inputStyle} th={th} />
         </div>
         <div style={{ fontSize: 11, color: th.textFaint2, marginTop: 6 }}>{t('alertsHint')}</div>
       </Section>
@@ -372,71 +407,6 @@ export function SettingsView({ onSettingsChange }: Props) {
             {updateStatus.state === 'error' && `${t('updateError')}: ${updateStatus.message ?? ''}`}
           </div>
         )}
-      </Section>
-
-      {/* Beta Providers */}
-      <Section title={t('sectionBeta')} th={th}>
-        <div style={{ fontSize: 11, color: th.textFaint2, marginBottom: 10 }}>{t('betaHint')}</div>
-
-        {/* GitHub Copilot */}
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <CheckRow
-              label={t('betaCopilotLabel')}
-              checked={s.betaProviders?.copilot?.enabled ?? false}
-              onChange={v => upd(p => ({ ...p, betaProviders: { ...p.betaProviders, copilot: { enabled: v } } }))}
-              th={th}
-            />
-            <StatusDot status={copilotStatus} t={t} />
-            <button
-              onClick={() => window.api.showCopilotLoginWindow()}
-              style={{ ...secondaryBtn, marginLeft: 'auto', fontSize: 11 }}
-            >
-              {t('betaLoginBtn')}
-            </button>
-          </div>
-          <div style={{ fontSize: 11, color: th.textFaint2, paddingLeft: 20 }}>{t('betaCopilotDesc')}</div>
-        </div>
-
-        {/* OpenAI Codex */}
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <CheckRow
-              label={t('betaCodexLabel')}
-              checked={s.betaProviders?.codex?.enabled ?? false}
-              onChange={v => upd(p => ({ ...p, betaProviders: { ...p.betaProviders, codex: { enabled: v } } }))}
-              th={th}
-            />
-            <StatusDot status={codexStatus} t={t} />
-            <button
-              onClick={() => window.api.showCodexLoginWindow()}
-              style={{ ...secondaryBtn, marginLeft: 'auto', fontSize: 11 }}
-            >
-              {t('betaLoginBtn')}
-            </button>
-          </div>
-          <div style={{ fontSize: 11, color: th.textFaint2, paddingLeft: 20 }}>{t('betaCodexDesc')}</div>
-        </div>
-
-        {/* Google Gemini */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <CheckRow
-              label={t('betaGeminiLabel')}
-              checked={s.betaProviders?.gemini?.enabled ?? false}
-              onChange={v => upd(p => ({ ...p, betaProviders: { ...p.betaProviders, gemini: { enabled: v } } }))}
-              th={th}
-            />
-            <StatusDot status={geminiStatus} t={t} />
-            <button
-              onClick={() => window.api.showGeminiLoginWindow()}
-              style={{ ...secondaryBtn, marginLeft: 'auto', fontSize: 11 }}
-            >
-              {t('betaLoginBtn')}
-            </button>
-          </div>
-          <div style={{ fontSize: 11, color: th.textFaint2, paddingLeft: 20 }}>{t('betaGeminiDesc')}</div>
-        </div>
       </Section>
 
       {/* Save */}

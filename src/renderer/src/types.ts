@@ -58,6 +58,8 @@ export interface Settings {
     show5h: boolean
     showExtra: boolean
     showFields: Record<string, boolean>  // key = WeeklyFieldDef.key
+    showCodexPrimary?: boolean
+    showCodexSecondary?: boolean
     // deprecated (migration用、削除しない)
     show7d?: boolean
     showOauth?: boolean
@@ -86,9 +88,8 @@ export interface Settings {
   }
   betaProviders?: {
     copilot?: { enabled: boolean }
-    codex?: { enabled: boolean }
-    gemini?: { enabled: boolean }
   }
+  codex?: { enabled: boolean }
 }
 
 // ---- Beta Providers ----
@@ -109,22 +110,14 @@ export interface CodexUsageData {
   unit: string
   fiveHourUtilization: number | null      // 5h primary window
   fiveHourResetDate: string | null
-}
-
-export interface GeminiModelData {
-  remainingPct: number   // 0–100 remaining
-  resetTime: string | null
-}
-
-export interface GeminiUsageData {
-  pro: GeminiModelData | null
-  flash: GeminiModelData | null
+  primaryWindowMinutes: number | null
+  secondaryWindowMinutes: number | null
+  planType: string | null
 }
 
 export interface BetaProvidersData {
   copilot: CopilotUsageData | null
   codex: CodexUsageData | null
-  gemini: GeminiUsageData | null
 }
 
 // ---- cc-pace-meter (ローカルJSONLベースのバーンレート) ----
@@ -200,13 +193,10 @@ declare global {
       getBetaData: () => Promise<BetaProvidersData>
       getCopilotLoginStatus: () => Promise<'logged-in' | 'logged-out' | 'unknown'>
       getCodexLoginStatus: () => Promise<'logged-in' | 'logged-out' | 'unknown'>
-      getGeminiLoginStatus: () => Promise<'logged-in' | 'logged-out' | 'unknown'>
       showCopilotLoginWindow: () => Promise<void>
       hideCopilotLoginWindow: () => Promise<void>
       showCodexLoginWindow: () => Promise<void>
       hideCodexLoginWindow: () => Promise<void>
-      showGeminiLoginWindow: () => Promise<void>
-      hideGeminiLoginWindow: () => Promise<void>
     }
   }
 }

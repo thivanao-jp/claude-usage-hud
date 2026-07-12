@@ -22,7 +22,6 @@ import { getTokenFromCredentials } from './credentials'
 import { ClaudeWebFetcher } from './claudeWebFetcher'
 import { GitHubCopilotFetcher } from './githubCopilotFetcher'
 import { CodexFetcher } from './codexFetcher'
-import { GeminiFetcher } from './geminiFetcher'
 import { createBarIcon } from './trayIcon'
 import { pollCcUsage, getCcPaceData, getBootstrapEstimate, CcPaceData, HistoryPoint, BOOTSTRAP_LOOKBACK_MS } from './ccPaceMeter'
 
@@ -50,12 +49,11 @@ let dragRestoreTimer: ReturnType<typeof setTimeout> | null = null
 const claudeWebFetcher = new ClaudeWebFetcher()
 const copilotFetcher = new GitHubCopilotFetcher()
 const codexFetcher = new CodexFetcher()
-const geminiFetcher = new GeminiFetcher()
 
 let lastUsage: UsageData | null = null
 let lastProfile: ProfileData | null = null
 let lastSuccessAt: Date | null = null
-let lastBeta: BetaProvidersData = { copilot: null, codex: null, gemini: null }
+let lastBeta: BetaProvidersData = { copilot: null, codex: null }
 let lastCcPace: CcPaceData = { available: false, paceTokensInBlock: null, burnRatePerMin: null, burnRateCostPerMin: null, minutesToLimit: null, minutesToReset: null, estimatedLimitTokens: null, estimatedLimitUsd: null, calibratedNow: false, sampleCount: 0 }
 let ccPaceTimer: ReturnType<typeof setInterval> | null = null
 
@@ -104,10 +102,8 @@ function getCompactHeight(settings: Settings, ccPace?: CcPaceData | null): numbe
     ...WEEKLY_FIELD_DEFS.map(f => showFields[f.key] ?? false),
     settings.tray.showExtra,
     bp.copilot?.enabled ?? false,
-    bp.codex?.enabled ?? false,  // 5h bar
-    bp.codex?.enabled ?? false,  // 7d bar (Codex is always 2 bars)
-    bp.gemini?.enabled ?? false,  // Pro bar
-    bp.gemini?.enabled ?? false,  // Flash bar
+    settings.codex?.enabled && (settings.tray.showCodexPrimary ?? true),
+    settings.codex?.enabled && (settings.tray.showCodexSecondary ?? true),
   ].filter(Boolean).length || 1
   const ccPaceExtra = (settings.tray.show5h && ccPace?.available && ccPace.burnRatePerMin != null) ? COMPACT_CCPACE_H : 0
   return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD + ccPaceExtra
@@ -115,8 +111,7 @@ function getCompactHeight(settings: Settings, ccPace?: CcPaceData | null): numbe
 
 function getDetailHeight(settings: Settings): number {
   const bp = settings.betaProviders ?? {}
-  // Codex は 5h + 7d で2枚、Gemini は Pro + Flash で2枚
-  const betaCount = (bp.copilot?.enabled ? 1 : 0) + (bp.codex?.enabled ? 2 : 0) + (bp.gemini?.enabled ? 2 : 0)
+  const betaCount = (bp.copilot?.enabled ? 1 : 0) + (settings.codex?.enabled ? 2 : 0)
   return DETAIL_H_BASE + betaCount * DETAIL_BETA_H
 }
 
@@ -132,14 +127,10 @@ function getUltraHeight(settings: Settings, usage?: UsageData | null, beta?: Bet
   }
   if (settings.tray.showExtra && (!usage || usage.extra_usage != null)) count++
   if (bp.copilot?.enabled && (!beta || beta.copilot != null)) count++
-  if (bp.codex?.enabled) {
+  if (settings.codex?.enabled) {
     // 5h bar: only when data confirms it exists
-    if (!beta || !beta.codex || beta.codex.fiveHourUtilization != null) count++
-    count++ // 7d bar always present when codex enabled
-  }
-  if (bp.gemini?.enabled) {
-    if (!beta || !beta.gemini || beta.gemini.pro   != null) count++
-    if (!beta || !beta.gemini || beta.gemini.flash != null) count++
+    if ((settings.tray.showCodexPrimary ?? true) && (!beta || !beta.codex || beta.codex.fiveHourUtilization != null)) count++
+    if (settings.tray.showCodexSecondary ?? true) count++
   }
   count = Math.max(count, 1)
   return ULTRA_HANDLE_H + count * ULTRA_BAR_H - 2 + ULTRA_PAD
@@ -385,36 +376,49 @@ function updateTray(usage: UsageData, settings: Settings, isStale: boolean): voi
 
   const showFields = settings.tray.showFields ?? {}
   const usageRecord = usage as unknown as Record<string, UsageEntry | null>
+  const codex = lastBeta.codex
 
   // Windows: バーチャートアイコンを動的生成
   // macOS:  setTitle() でメニューバーにテキスト表示（setImage は機能しない）
   if (process.platform === 'win32') {
-    const icon = createBarIcon(usage, settings, isStale)
+    const icon = createBarIcon(usage, settings, isStale, codex)
     if (!icon.isEmpty()) tray.setImage(icon)
     // ツールチップに数値を表示
     const parts: string[] = []
     if (settings.tray.show5h && usage.five_hour)
-      parts.push(`5h: ${Math.round(usage.five_hour.utilization)}%`)
+      parts.push(`Claude 5h: ${Math.round(usage.five_hour.utilization)}%`)
     for (const field of WEEKLY_FIELD_DEFS) {
       const entry = usageRecord[field.key]
       if (showFields[field.key] && entry)
-        parts.push(`${field.shortLabel}: ${Math.round(entry.utilization)}%`)
+        parts.push(`Claude ${field.shortLabel}: ${Math.round(entry.utilization)}%`)
     }
+    if (settings.codex?.enabled && settings.tray.showCodexPrimary && codex?.fiveHourUtilization != null)
+      parts.push(`Codex ${formatCodexWindow(codex.primaryWindowMinutes)}: ${Math.round(codex.fiveHourUtilization)}%`)
+    if (settings.codex?.enabled && settings.tray.showCodexSecondary && (codex?.secondaryWindowMinutes != null || codex?.fiveHourUtilization == null) && codex)
+      parts.push(`Codex ${formatCodexWindow(codex.secondaryWindowMinutes)}: ${Math.round(codex.utilization)}%`)
     const tip = parts.length > 0
       ? `Claude Usage HUD${isStale ? ' ⚠' : ''}\n${parts.join('\n')}`
       : 'Claude Usage HUD'
     tray.setToolTip(tip)
   } else {
-    // macOS: メニューバーにテキスト表示
+    // macOS: メニューバーはアイコンだけにして横幅を節約し、詳細はホバー時のツールチップへ。
     const parts: string[] = []
     if (settings.tray.show5h && usage.five_hour)
-      parts.push(`5h:${Math.round(usage.five_hour.utilization)}%`)
+      parts.push(`Cl5h:${Math.round(usage.five_hour.utilization)}%`)
     for (const field of WEEKLY_FIELD_DEFS) {
       const entry = usageRecord[field.key]
       if (showFields[field.key] && entry)
-        parts.push(`${field.shortLabel.toLowerCase()}:${Math.round(entry.utilization)}%`)
+        parts.push(`Cl${field.shortLabel.toLowerCase()}:${Math.round(entry.utilization)}%`)
     }
-    tray.setTitle(parts.length > 0 ? parts.join(' ') + (isStale ? '~' : '') : '--')
+    if (settings.codex?.enabled && settings.tray.showCodexPrimary && codex?.fiveHourUtilization != null)
+      parts.push(`Cdx${formatCodexWindow(codex.primaryWindowMinutes)}:${Math.round(codex.fiveHourUtilization)}%`)
+    if (settings.codex?.enabled && settings.tray.showCodexSecondary && (codex?.secondaryWindowMinutes != null || codex?.fiveHourUtilization == null) && codex)
+      parts.push(`Cdx${formatCodexWindow(codex.secondaryWindowMinutes)}:${Math.round(codex.utilization)}%`)
+    const tip = parts.length > 0
+      ? `Claude Usage HUD${isStale ? ' ⚠' : ''}\n${parts.join('\n')}`
+      : 'Claude Usage HUD'
+    tray.setTitle('')
+    tray.setToolTip(tip)
   }
 }
 
@@ -566,7 +570,7 @@ async function doUpdate(): Promise<void> {
 async function doUpdateBeta(): Promise<void> {
   const settings = loadSettings()
   const bp = settings.betaProviders ?? {}
-  const results: BetaProvidersData = { copilot: null, codex: null, gemini: null }
+  const results: BetaProvidersData = { copilot: null, codex: null }
 
   if (bp.copilot?.enabled) {
     try {
@@ -577,7 +581,7 @@ async function doUpdateBeta(): Promise<void> {
     }
   }
 
-  if (bp.codex?.enabled) {
+  if (settings.codex?.enabled) {
     try {
       results.codex = await codexFetcher.fetchData()
       log('doUpdateBeta: codex=', results.codex)
@@ -586,17 +590,29 @@ async function doUpdateBeta(): Promise<void> {
     }
   }
 
-  if (bp.gemini?.enabled) {
-    try {
-      results.gemini = await geminiFetcher.fetchData()
-      log('doUpdateBeta: gemini=', results.gemini)
-    } catch (e) {
-      log('doUpdateBeta: gemini error:', e)
-    }
-  }
-
   lastBeta = results
+  if (lastUsage) updateTray(lastUsage, settings, false)
+  checkCodexAlerts(results.codex, settings)
   sendToHud(lastUsage == null)
+}
+
+function checkCodexAlerts(codex: BetaProvidersData['codex'], settings: Settings): void {
+  if (!codex) return
+  const primaryThreshold = settings.alerts['codex_primary']
+  if (primaryThreshold && codex.fiveHourUtilization != null && codex.fiveHourUtilization >= primaryThreshold) {
+    new Notification({ title: 'Claude Usage HUD', body: `Codex ${formatCodexWindow(codex.primaryWindowMinutes)} usage is at ${Math.round(codex.fiveHourUtilization)}% (threshold: ${primaryThreshold}%)` }).show()
+  }
+  const secondaryThreshold = settings.alerts['codex_secondary']
+  if (secondaryThreshold && (codex.secondaryWindowMinutes != null || codex.fiveHourUtilization == null) && codex.utilization >= secondaryThreshold) {
+    new Notification({ title: 'Claude Usage HUD', body: `Codex ${formatCodexWindow(codex.secondaryWindowMinutes)} usage is at ${Math.round(codex.utilization)}% (threshold: ${secondaryThreshold}%)` }).show()
+  }
+}
+
+function formatCodexWindow(minutes: number | null): string {
+  if (minutes == null) return '%'
+  if (minutes % (24 * 60) === 0) return `${minutes / (24 * 60)}d`
+  if (minutes % 60 === 0) return `${minutes / 60}h`
+  return `${minutes}m`
 }
 
 function scheduleUpdates(): void {
@@ -706,13 +722,10 @@ ipcMain.handle('get-beta-data', () => lastBeta)
 ipcMain.handle('get-cc-pace-data', () => lastCcPace)
 ipcMain.handle('get-copilot-login-status', () => copilotFetcher.getLoginStatus())
 ipcMain.handle('get-codex-login-status', () => codexFetcher.getLoginStatus())
-ipcMain.handle('get-gemini-login-status', () => geminiFetcher.getLoginStatus())
 ipcMain.handle('show-copilot-login-window', () => copilotFetcher.showLoginWindow())
 ipcMain.handle('hide-copilot-login-window', () => copilotFetcher.hideLoginWindow())
 ipcMain.handle('show-codex-login-window', () => codexFetcher.showLoginWindow())
 ipcMain.handle('hide-codex-login-window', () => codexFetcher.hideLoginWindow())
-ipcMain.handle('show-gemini-login-window', () => geminiFetcher.showLoginWindow())
-ipcMain.handle('hide-gemini-login-window', () => geminiFetcher.hideLoginWindow())
 
 // ---- App Lifecycle ----
 
@@ -854,15 +867,11 @@ if (!gotTheLock) {
     claudeWebFetcher.setLogCallback(log)
     copilotFetcher.setLogCallback(log)
     codexFetcher.setLogCallback(log)
-    geminiFetcher.setLogCallback(log)
     copilotFetcher.setStatusChangeCallback((status) => {
       log('copilot login status changed:', status)
     })
     codexFetcher.setStatusChangeCallback((status) => {
       log('codex login status changed:', status)
-    })
-    geminiFetcher.setStatusChangeCallback((status) => {
-      log('gemini login status changed:', status)
     })
 
     // 起動時にキャッシュ済み orgUuid を復元
@@ -907,7 +916,6 @@ if (!gotTheLock) {
     claudeWebFetcher.destroy()
     copilotFetcher.destroy()
     codexFetcher.destroy()
-    geminiFetcher.destroy()
   })
 
   app.on('window-all-closed', (e) => { e.preventDefault() })

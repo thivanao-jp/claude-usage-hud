@@ -15,10 +15,11 @@ const defaultSettings: Settings = {
   viewMode: 'compact',
   language: 'auto',
   theme: 'auto',
-  tray: { show5h: true, show7d: true, showOauth: false, showOpus: false, showSonnet: false, showExtra: false },
+  tray: { show5h: true, show7d: true, showOauth: false, showOpus: false, showSonnet: false, showExtra: false, showFields: {}, showCodexPrimary: true, showCodexSecondary: true },
   window: { opacity: 90, alwaysOnTop: true },
   alerts: {},
   pace: { workHoursOnly: false, workDayStart: 5, workDayEnd: 22, excludeWeekends: true },
+  codex: { enabled: false },
 }
 
 function useResolvedTheme(themeSetting: ThemeSetting): ThemeTokens {
@@ -44,7 +45,7 @@ function HudApp() {
   const [mode, setMode] = useState<ViewMode>('compact')
   const [lastSuccessAt, setLastSuccessAt] = useState<Date | null>(null)
   const [isStale, setIsStale] = useState(false)
-  const [beta, setBeta] = useState<BetaProvidersData>({ copilot: null, codex: null, gemini: null })
+  const [beta, setBeta] = useState<BetaProvidersData>({ copilot: null, codex: null })
   const [ccPace, setCcPace] = useState<CcPaceData>({ available: false, paceTokensInBlock: null, burnRatePerMin: null, burnRateCostPerMin: null, minutesToLimit: null, minutesToReset: null, estimatedLimitTokens: null, estimatedLimitUsd: null, calibratedNow: false, sampleCount: 0 })
 
   useEffect(() => {

@@ -18,7 +18,8 @@ Always-on-top floating window showing usage bars at a glance.
 - **OA** — 7-day OAuth Apps window (Claude Code, Cursor, Windsurf, etc.)
 - **Opus** — 7-day Opus window
 - **EX** — Extra usage (monthly add-on credits, when enabled)
-- **β** — Beta provider bars (GitHub Copilot, OpenAI Codex, Google Gemini — when enabled)
+- **Codex** — Current Codex rate-limit windows from the official Codex CLI (when enabled)
+- **β** — Experimental provider bar (GitHub Copilot — when enabled)
 
 ### Detail View
 Expanded view with full usage cards, reset times, and a usage history chart.
@@ -33,16 +34,15 @@ Live usage percentages always visible in the macOS menu bar or Windows system tr
 ### Alerts
 OS notifications when any usage window exceeds a configurable threshold.
 
-### β Providers (experimental)
+### Provider integrations
 Optional support for usage data from other AI services:
 
+- **OpenAI Codex** — Current rate-limit usage from the official Codex CLI App Server. Window names follow the limits returned for your plan (for example, 15m, 5h, or 7d). Requires the Codex CLI to be installed and logged in with ChatGPT.
 - **GitHub Copilot** — Monthly premium request usage, fetched via `gh auth token` (GitHub CLI must be installed and authenticated)
-- **OpenAI Codex Cloud** — Monthly usage, fetched via a hidden browser window maintaining your chatgpt.com session
-- **Google Gemini** — Daily quota for Gemini 2.5 Pro and Gemini 2.5 Flash, fetched using the Gemini CLI's cached OAuth credentials (`~/.gemini/oauth_creds.json`). Requires [Gemini CLI](https://github.com/google-gemini/gemini-cli) to be installed and authenticated.
 
-Enable each provider individually in **Settings → β Providers**. When data is unavailable (not logged in, API changed, etc.), the card shows "Data unavailable" without affecting the rest of the app.
+Enable each provider individually in **Settings → β Providers**. When data is unavailable, the card shows "Data unavailable" without affecting the rest of the app.
 
-> These providers use unofficial or undocumented endpoints and may break without notice.
+> Codex uses its documented App Server API. GitHub Copilot remains an experimental integration that uses CLI-derived data.
 
 ### Multilingual
 English and Japanese, with automatic OS language detection.
@@ -95,7 +95,8 @@ English and Japanese, with automatic OS language detection.
 | **Update Interval** | 1 / 5 / 10 / 30 minutes |
 | **Floating Window** | Always on top, opacity |
 | **Alerts** | Notification threshold (%) per usage window |
-| **β Providers** | Enable GitHub Copilot, OpenAI Codex, and/or Google Gemini usage tracking |
+| **OpenAI Codex** | Enable official Codex usage tracking and configure its tray/alert windows |
+| **β Providers** | Enable GitHub Copilot usage tracking |
 
 ---
 
