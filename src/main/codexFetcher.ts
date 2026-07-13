@@ -49,7 +49,9 @@ export class CodexFetcher {
   }
 
   private executable(): string {
-    return process.env.CODEX_BIN || 'codex'
+    // npm installs the Windows CLI as codex.cmd.  Unlike POSIX executables,
+    // command shims need to be launched through cmd.exe.
+    return process.env.CODEX_BIN || (process.platform === 'win32' ? 'codex.cmd' : 'codex')
   }
 
   private async ensureServer(): Promise<void> {
@@ -57,10 +59,17 @@ export class CodexFetcher {
 
     this.ready = new Promise<void>((resolve, reject) => {
       const inheritedPath = process.env.PATH ?? ''
-      const path = ['/opt/homebrew/bin', '/usr/local/bin', inheritedPath].filter(Boolean).join(':')
+      // Keep Windows' semicolon-delimited PATH intact.  Rebuilding it with
+      // ':' prevented Windows from resolving codex.cmd at all.
+      const path = process.platform === 'win32'
+        ? inheritedPath
+        : ['/opt/homebrew/bin', '/usr/local/bin', inheritedPath].filter(Boolean).join(':')
       const proc = spawn(this.executable(), ['app-server'], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env, PATH: path },
+        // codex.cmd is the standard npm shim on Windows; cmd.exe also handles
+        // a user-specified executable or command name through CODEX_BIN.
+        shell: process.platform === 'win32',
       })
       this.proc = proc
       const rl = createInterface({ input: proc.stdout })
@@ -81,7 +90,7 @@ export class CodexFetcher {
       rl.on('line', (line) => this.handleMessage(line))
 
       this.requestRaw('initialize', {
-        clientInfo: { name: 'claude_usage_hud', title: 'Claude Usage HUD', version: '0.9.5' },
+        clientInfo: { name: 'claude_usage_hud', title: 'Claude Usage HUD', version: '1.0.1' },
       }).then(() => {
         initialized = true
         this.send({ method: 'initialized', params: {} })
