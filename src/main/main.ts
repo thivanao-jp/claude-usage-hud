@@ -18,7 +18,7 @@ import { autoUpdater } from 'electron-updater'
 import { loadSettings, saveSettings, Settings, ViewMode, UltraPosition } from './settings'
 import { UsageData, ProfileData, UsageEntry, BetaProvidersData } from './claudeApi'
 import { WEEKLY_FIELD_DEFS } from './fieldDefs'
-import { saveUsageHistory, getUsageHistory, debugSeedHistory } from './db'
+import { saveUsageHistory, getUsageHistory, debugSeedHistory, debugClearHistory } from './db'
 import { getTokenFromCredentials } from './credentials'
 import { ClaudeWebFetcher } from './claudeWebFetcher'
 import { GitHubCopilotFetcher } from './githubCopilotFetcher'
@@ -1021,8 +1021,9 @@ async function captureFullPage(win: BrowserWindow, filePath: string): Promise<vo
   await sleep(400)
   const [w] = win.getContentSize()
   const height = await measureContentHeight(win)
-  // macOS はウィンドウ位置によって setContentSize の高さを画面ワークエリア内に収めようとするため、
-  // まず画面上端へ寄せてから伸ばすと、より高いところまでクランプされずに広げられる。
+  // macOS はウィンドウの高さを画面のワークエリア内に収まるようクランプすることがある
+  // （実測: 高さ1700超の要求が~1014pt相当までクランプされた）。画面上端へ寄せておくが、
+  // それでもクランプされる場合はコンテンツの先頭〜クランプされた高さまでのみ撮影される。
   win.setPosition(win.getPosition()[0], 0)
   win.setContentSize(w, Math.max(560, Math.ceil(height)))
   await sleep(250)
@@ -1039,6 +1040,17 @@ async function clickButtonContaining(win: BrowserWindow, candidates: string[]): 
   `)
 }
 
+/** 固定 sleep だけに頼らず、DOM に要素が現れるまでポーリングする（見つからなければ timeoutMs で諦める）。 */
+async function waitForSelector(win: BrowserWindow, selector: string, timeoutMs = 3000): Promise<boolean> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const found = await win.webContents.executeJavaScript(`!!document.querySelector(${JSON.stringify(selector)})`)
+    if (found) return true
+    await sleep(100)
+  }
+  return false
+}
+
 async function runScreenshotMode(): Promise<void> {
   const outDir = join(app.getAppPath(), 'docs', 'screenshots', SCREENSHOT_LOCALE.startsWith('ja') ? 'ja' : 'en')
   mkdirSync(outDir, { recursive: true })
@@ -1051,6 +1063,7 @@ async function runScreenshotMode(): Promise<void> {
   lastBeta = buildScreenshotBeta()
   lastCcPace = buildScreenshotCcPace()
   lastSuccessAt = new Date()
+  debugClearHistory() // 隔離プロファイルを使い回した場合に前回実行分の合成履歴が残らないようにする
   debugSeedHistory(buildScreenshotHistory())
 
   hudWindow = createHudWindow()
@@ -1066,7 +1079,10 @@ async function runScreenshotMode(): Promise<void> {
   switchViewMode('detail')
   await sleep(300)
   await clickButtonContaining(hudWindow, ['Usage History', '使用履歴'])
-  await sleep(500)
+  // 固定 sleep だけに頼らず、getHistory() の IPC 往復 + Recharts のレイアウトが終わって
+  // 実際にグラフの線が描画されるまで待ってから撮影する
+  await waitForSelector(hudWindow, '.recharts-line')
+  await sleep(200)
   // 履歴チャートを開くとウィンドウ固定サイズより中身が縦に伸びるため、撮影時だけ全体が入る高さへ広げる
   await captureFullPage(hudWindow, join(outDir, 'detail.png'))
 
