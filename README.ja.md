@@ -8,6 +8,34 @@ Claude の使用状況をメニューバーとフローティングウィンド�
 
 ---
 
+## スクリーンショット
+
+<table>
+<tr>
+<td align="center" width="50%">
+<img src="docs/screenshots/ja/compact.png" width="280" alt="コンパクト表示"><br>
+<sub><b>コンパクト表示</b> — 常に最前面の使用率バー</sub>
+</td>
+<td align="center" width="50%">
+<img src="docs/screenshots/ja/ultra.png" width="280" alt="ウルトラコンパクト表示"><br>
+<sub><b>ウルトラコンパクト</b> — 画面端に収まる最小表示</sub>
+</td>
+</tr>
+<tr>
+<td align="center" width="50%">
+<img src="docs/screenshots/ja/detail.png" width="280" alt="詳細表示"><br>
+<sub><b>詳細表示</b> — 使用量カード＋履歴チャート</sub>
+</td>
+<td align="center" width="50%">
+<img src="docs/screenshots/ja/settings.png" width="280" alt="設定画面">
+<br>
+<sub><b>設定画面</b> — プロバイダー・トレイ表示・アラート</sub>
+</td>
+</tr>
+</table>
+
+---
+
 ## 機能
 
 ### コンパクト表示

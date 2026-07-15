@@ -225,11 +225,11 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccP
                   transition: 'width 0.4s ease',
                 }} />
                 <div style={barTextStyle}>
-                  <span style={{ width: 30, flexShrink: 0 }}>{item.label}</span>
-                  <span style={{ width: 72, flexShrink: 0 }}>{date}</span>
-                  <span style={{ width: 44, flexShrink: 0 }}>{time}</span>
-                  <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{rel.major}</span>
-                  <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{rel.minor}</span>
+                  <span style={{ width: 56, flexShrink: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>{item.label}</span>
+                  <span style={{ width: 78, flexShrink: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>{date}</span>
+                  <span style={{ width: 58, flexShrink: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>{time}</span>
+                  <span style={{ width: 30, flexShrink: 0, textAlign: 'right' }}>{rel.major}</span>
+                  <span style={{ width: 24, flexShrink: 0, textAlign: 'right' }}>{rel.minor}</span>
                   <span style={{ flex: 1, textAlign: 'right' }}>{pct}%</span>
                 </div>
               </div>
@@ -328,11 +328,11 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccP
               <div style={{ position: 'relative', height: 28, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
                 <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
                 <div style={barTextStyle}>
-                  <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>Cpl β</span>
-                  <span style={{ width: 72, flexShrink: 0 }}>{d ? date : '—'}</span>
-                  <span style={{ width: 44, flexShrink: 0 }}>{d ? time : ''}</span>
-                  <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{d ? rel.major : ''}</span>
-                  <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{d ? rel.minor : ''}</span>
+                  <span style={{ width: 56, flexShrink: 0, fontSize: 9, overflow: 'hidden', whiteSpace: 'nowrap' }}>Cpl β</span>
+                  <span style={{ width: 78, flexShrink: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>{d ? date : '—'}</span>
+                  <span style={{ width: 58, flexShrink: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>{d ? time : ''}</span>
+                  <span style={{ width: 30, flexShrink: 0, textAlign: 'right' }}>{d ? rel.major : ''}</span>
+                  <span style={{ width: 24, flexShrink: 0, textAlign: 'right' }}>{d ? rel.minor : ''}</span>
                   <span style={{ flex: 1, textAlign: 'right' }}>{d ? `${pct}%` : '—'}</span>
                 </div>
               </div>
@@ -371,11 +371,11 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccP
               <div style={{ position: 'relative', height: 28, borderRadius: 4, overflow: 'hidden', background: th.bgBar }}>
                 <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
                 <div style={barTextStyle}>
-                  <span style={{ width: 30, flexShrink: 0, fontSize: 9 }}>{label}</span>
-                  <span style={{ width: 72, flexShrink: 0 }}>{hasData ? reset.date : '—'}</span>
-                  <span style={{ width: 44, flexShrink: 0 }}>{hasData ? reset.time : ''}</span>
-                  <span style={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{hasData ? reset.rel.major : ''}</span>
-                  <span style={{ width: 28, flexShrink: 0, textAlign: 'right' }}>{hasData ? reset.rel.minor : ''}</span>
+                  <span style={{ width: 56, flexShrink: 0, fontSize: 9, overflow: 'hidden', whiteSpace: 'nowrap' }}>{label}</span>
+                  <span style={{ width: 78, flexShrink: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>{hasData ? reset.date : '—'}</span>
+                  <span style={{ width: 58, flexShrink: 0, overflow: 'hidden', whiteSpace: 'nowrap' }}>{hasData ? reset.time : ''}</span>
+                  <span style={{ width: 30, flexShrink: 0, textAlign: 'right' }}>{hasData ? reset.rel.major : ''}</span>
+                  <span style={{ width: 24, flexShrink: 0, textAlign: 'right' }}>{hasData ? reset.rel.minor : ''}</span>
                   <span style={{ flex: 1, textAlign: 'right' }}>{hasData ? `${pct}%` : '—'}</span>
                 </div>
               </div>

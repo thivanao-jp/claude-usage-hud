@@ -197,6 +197,14 @@ declare global {
       hideCopilotLoginWindow: () => Promise<void>
       showCodexLoginWindow: () => Promise<void>
       hideCodexLoginWindow: () => Promise<void>
+      // Debug only: sets arbitrary usage/beta/ccPace values for local testing & screenshots.
+      // No-ops (returns { ok: false }) in packaged builds.
+      debugSetMockUsage: (payload: {
+        usage?: Partial<UsageData>
+        profile?: ProfileData
+        beta?: BetaProvidersData
+        ccPace?: CcPaceData
+      }) => Promise<{ ok: boolean; error?: string }>
     }
   }
 }

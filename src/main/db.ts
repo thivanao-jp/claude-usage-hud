@@ -86,6 +86,37 @@ export function saveUsageHistory(usage: UsageData): void {
     )
 }
 
+/**
+ * デバッグ/スクリーンショット生成専用: recorded_at を明示指定して履歴を挿入する。
+ * 呼び出し元 (main.ts の screenshot mode) で !app.isPackaged を確認してから使うこと。
+ */
+export function debugSeedHistory(points: { recordedAt: string; usage: UsageData }[]): void {
+  const stmt = db().prepare(
+    `INSERT INTO usage_history (recorded_at, five_hour, seven_day, seven_day_oauth_apps, seven_day_opus, seven_day_fable, seven_day_sonnet, seven_day_cowork, seven_day_omelette, iguana_necktie, omelette_promotional, cinder_cove, tangelo, nimbus_quill, amber_ladder, extra_usage)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+  for (const { recordedAt, usage } of points) {
+    stmt.run(
+      recordedAt,
+      usage.five_hour?.utilization ?? null,
+      usage.seven_day?.utilization ?? null,
+      usage.seven_day_oauth_apps?.utilization ?? null,
+      usage.seven_day_opus?.utilization ?? null,
+      usage.seven_day_fable?.utilization ?? null,
+      usage.seven_day_sonnet?.utilization ?? null,
+      usage.seven_day_cowork?.utilization ?? null,
+      usage.seven_day_omelette?.utilization ?? null,
+      usage.iguana_necktie?.utilization ?? null,
+      usage.omelette_promotional?.utilization ?? null,
+      usage.cinder_cove?.utilization ?? null,
+      usage.tangelo?.utilization ?? null,
+      usage.nimbus_quill?.utilization ?? null,
+      usage.amber_ladder?.utilization ?? null,
+      usage.extra_usage?.utilization ?? null
+    )
+  }
+}
+
 export interface HistoryRow {
   recorded_at: string
   five_hour: number | null

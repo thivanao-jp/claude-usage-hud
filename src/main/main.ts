@@ -10,20 +10,48 @@ import {
   screen
 } from 'electron'
 import { join } from 'path'
-import { appendFileSync, mkdirSync, statSync, renameSync } from 'fs'
+import { tmpdir } from 'os'
+import { appendFileSync, mkdirSync, statSync, renameSync, writeFileSync } from 'fs'
 import { createServer as createHttpServer, IncomingMessage, ServerResponse } from 'http'
 import { is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
 import { loadSettings, saveSettings, Settings, ViewMode, UltraPosition } from './settings'
 import { UsageData, ProfileData, UsageEntry, BetaProvidersData } from './claudeApi'
 import { WEEKLY_FIELD_DEFS } from './fieldDefs'
-import { saveUsageHistory, getUsageHistory } from './db'
+import { saveUsageHistory, getUsageHistory, debugSeedHistory } from './db'
 import { getTokenFromCredentials } from './credentials'
 import { ClaudeWebFetcher } from './claudeWebFetcher'
 import { GitHubCopilotFetcher } from './githubCopilotFetcher'
 import { CodexFetcher } from './codexFetcher'
 import { createBarIcon } from './trayIcon'
 import { pollCcUsage, getCcPaceData, getBootstrapEstimate, CcPaceData, HistoryPoint, BOOTSTRAP_LOOKBACK_MS } from './ccPaceMeter'
+
+// ---- Screenshot / Debug Mock Mode ----
+// README用スクリーンショット生成のための開発専用モード。パッケージ済みアプリでは絶対に有効化されない。
+const SCREENSHOT_MODE = !app.isPackaged && process.env.HUD_SCREENSHOT_MODE === '1'
+// toLocaleDateString/toLocaleTimeString は OS ロケールに従うため、README用スクショの日付表記を
+// 言語版と一致させたい場合は HUD_SCREENSHOT_LOCALE=ja-JP のように明示指定する（未指定時は英語）
+const SCREENSHOT_LOCALE = process.env.HUD_SCREENSHOT_LOCALE ?? 'en-US'
+if (SCREENSHOT_MODE) {
+  // 実ユーザーの Application Support データ（トークン・履歴・設定）を絶対に触らないよう隔離する
+  // ロケール毎に別プロファイルにする（Chromium は Local State に app_locale をキャッシュするため、
+  // 同じ userData を使い回すと --lang / LANG を変えても古いロケールが残ってしまう）
+  app.setPath('userData', join(tmpdir(), `claude-usage-hud-screenshot-${SCREENSHOT_LOCALE}`))
+  // Chromium の --lang は 'ja-JP' のような地域付きコードを認識せず既定(en-US)へフォールバックするため、
+  // 言語コードのみ('ja'/'en')を渡す
+  app.commandLine.appendSwitch('lang', SCREENSHOT_LOCALE.split('-')[0])
+  // toLocaleDateString 等 V8/ICU の既定ロケール解決は --lang スイッチだけでは効かず LANG/LC_ALL を見るため、両方設定する
+  const posixLocale = `${SCREENSHOT_LOCALE.replace('-', '_')}.UTF-8`
+  process.env.LANG = posixLocale
+  process.env.LC_ALL = posixLocale
+}
+
+const EMPTY_USAGE: UsageData = {
+  five_hour: null, seven_day: null, seven_day_oauth_apps: null, seven_day_opus: null,
+  seven_day_fable: null, seven_day_sonnet: null, seven_day_cowork: null, seven_day_omelette: null,
+  iguana_necktie: null, omelette_promotional: null, cinder_cove: null, tangelo: null,
+  nimbus_quill: null, amber_ladder: null, extra_usage: null,
+}
 
 // stdoutがバッファリングされることがあるため、ログは直接ファイルに書き込む
 // app.getPath('logs') はプラットフォームに応じた適切なディレクトリを返す
@@ -486,6 +514,7 @@ function sendToHud(isStale: boolean): void {
 let ccPaceBootstrapAttempted = false
 
 async function updateCcPace(): Promise<void> {
+  if (SCREENSHOT_MODE) return
   const settings = loadSettings()
 
   // 初回起動時: 過去のJSONL+利用履歴からまとめてキャリブレーションのタネを作る
@@ -538,6 +567,7 @@ async function updateCcPace(): Promise<void> {
 }
 
 async function doUpdate(): Promise<void> {
+  if (SCREENSHOT_MODE) return
   const settings = loadSettings()
 
   try {
@@ -568,6 +598,7 @@ async function doUpdate(): Promise<void> {
 }
 
 async function doUpdateBeta(): Promise<void> {
+  if (SCREENSHOT_MODE) return
   const settings = loadSettings()
   const bp = settings.betaProviders ?? {}
   const results: BetaProvidersData = { copilot: null, codex: null }
@@ -727,6 +758,25 @@ ipcMain.handle('hide-copilot-login-window', () => copilotFetcher.hideLoginWindow
 ipcMain.handle('show-codex-login-window', () => codexFetcher.showLoginWindow())
 ipcMain.handle('hide-codex-login-window', () => codexFetcher.hideLoginWindow())
 
+// デバッグ専用: 任意の使用率・リセット時刻を注入する（パッケージ済みビルドでは常に拒否）。
+// スクリーンショット撮影や表示崩れ確認のため、DevTools コンソールから
+// window.api.debugSetMockUsage({ usage: { five_hour: { utilization: 90, resets_at: ... } } }) のように呼び出す。
+ipcMain.handle('debug-set-mock-usage', (_e, payload: {
+  usage?: Partial<UsageData>
+  profile?: ProfileData
+  beta?: BetaProvidersData
+  ccPace?: CcPaceData
+}) => {
+  if (app.isPackaged) return { ok: false, error: 'debug mock is unavailable in packaged builds' }
+  if (payload.usage) lastUsage = { ...EMPTY_USAGE, ...(lastUsage ?? {}), ...payload.usage }
+  if (payload.profile) lastProfile = payload.profile
+  if (payload.beta) lastBeta = payload.beta
+  if (payload.ccPace) lastCcPace = payload.ccPace
+  lastSuccessAt = new Date()
+  sendToHud(false)
+  return { ok: true }
+})
+
 // ---- App Lifecycle ----
 
 // ---- Auto Updater ----
@@ -842,6 +892,191 @@ function startLocalApiServer(): void {
   })
 }
 
+// ---- Screenshot Mode (README用の画面キャプチャ生成、開発専用) ----
+//
+// Usage: HUD_SCREENSHOT_MODE=1 npm run dev
+// docs/screenshots/*.png に compact/ultra/detail/settings の4枚を書き出して自動終了する。
+// SCREENSHOT_MODE が false のときはこの関数群は一切呼ばれない。
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function isoInHours(hours: number): string {
+  return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString()
+}
+
+function buildScreenshotSettings(base: Settings): Settings {
+  return {
+    ...base,
+    viewMode: 'compact',
+    theme: 'dark',
+    language: SCREENSHOT_LOCALE.startsWith('ja') ? 'ja' : 'en',
+    tray: {
+      ...base.tray,
+      show5h: true,
+      showExtra: true,
+      showFields: {
+        seven_day: true,
+        seven_day_oauth_apps: true,
+        seven_day_opus: true,
+        seven_day_sonnet: false,
+        seven_day_cowork: false,
+        seven_day_omelette: false,
+        iguana_necktie: false,
+        omelette_promotional: false,
+      },
+      showCodexPrimary: true,
+      showCodexSecondary: true,
+    },
+    window: { ...base.window, ultraPosition: 'top-right' },
+    betaProviders: { copilot: { enabled: true } },
+    codex: { enabled: true },
+    alerts: { five_hour: 90, seven_day: 90 },
+  }
+}
+
+function buildScreenshotUsage(): UsageData {
+  return {
+    ...EMPTY_USAGE,
+    five_hour: { utilization: 62, resets_at: isoInHours(1.8) },
+    seven_day: { utilization: 41, resets_at: isoInHours(3.2 * 24) },
+    seven_day_oauth_apps: { utilization: 28, resets_at: isoInHours(3.2 * 24) },
+    seven_day_opus: { utilization: 15, resets_at: isoInHours(3.2 * 24) },
+    extra_usage: { is_enabled: true, monthly_limit: 2000, used_credits: 164, utilization: 8.2, currency: 'USD' },
+  }
+}
+
+function buildScreenshotProfile(): ProfileData {
+  return {
+    account: { display_name: 'Demo User', email: 'demo@example.com', has_claude_max: true, has_claude_pro: true },
+    organization: { uuid: 'demo-org', name: 'Demo Workspace', rate_limit_tier: 'default_max_5x' },
+  }
+}
+
+function buildScreenshotBeta(): BetaProvidersData {
+  return {
+    copilot: { used: 220, limit: 500, utilization: 44, resetDate: isoInHours(12 * 24), planType: 'business' },
+    codex: {
+      used: 52, limit: 100, utilization: 52, resetDate: isoInHours(2 * 24), unit: '7d',
+      fiveHourUtilization: 35, fiveHourResetDate: isoInHours(2.1),
+      primaryWindowMinutes: 300, secondaryWindowMinutes: 10080, planType: 'plus',
+    },
+  }
+}
+
+function buildScreenshotCcPace(): CcPaceData {
+  return {
+    available: true, paceTokensInBlock: 148_000, burnRatePerMin: 1250, burnRateCostPerMin: 0.42,
+    minutesToLimit: 95, minutesToReset: 140, estimatedLimitTokens: 620_000, estimatedLimitUsd: 18.5,
+    calibratedNow: false, sampleCount: 6,
+  }
+}
+
+/** 直近7日分、2時間おきの合成履歴（5hはノコギリ波、週次系はゆるやかな右肩上がり）。 */
+function buildScreenshotHistory(): { recordedAt: string; usage: UsageData }[] {
+  const points: { recordedAt: string; usage: UsageData }[] = []
+  const totalHours = 7 * 24
+  const stepHours = 2
+  for (let h = totalHours; h >= 0; h -= stepHours) {
+    const t = Date.now() - h * 60 * 60 * 1000
+    const progress = (totalHours - h) / totalHours // 0 (7日前) -> 1 (現在)
+    const fiveHourPhase = ((totalHours - h) % 5) / 5 // 0 -> 1 のノコギリ波（5hごとにリセット）
+    const five = Math.min(96, Math.round(8 + fiveHourPhase * 80 + Math.random() * 5))
+    const sevenDay = Math.min(88, Math.round(4 + progress * 44 + Math.random() * 4))
+    const oauth = Math.min(80, Math.round(3 + progress * 30 + Math.random() * 3))
+    const opus = Math.min(55, Math.round(progress * 18 + Math.random() * 3))
+    const extra = Math.min(35, Math.round(progress * 9 + Math.random() * 2))
+    points.push({
+      recordedAt: new Date(t).toISOString().slice(0, 19).replace('T', ' '),
+      usage: {
+        ...EMPTY_USAGE,
+        five_hour: { utilization: five, resets_at: null },
+        seven_day: { utilization: sevenDay, resets_at: null },
+        seven_day_oauth_apps: { utilization: oauth, resets_at: null },
+        seven_day_opus: { utilization: opus, resets_at: null },
+        extra_usage: { is_enabled: true, monthly_limit: 2000, used_credits: 0, utilization: extra, currency: 'USD' },
+      },
+    })
+  }
+  return points
+}
+
+async function captureWindow(win: BrowserWindow, filePath: string, waitMs = 400): Promise<void> {
+  await sleep(waitMs)
+  const image = await win.webContents.capturePage()
+  writeFileSync(filePath, image.toPNG())
+  log('screenshot saved:', filePath)
+}
+
+// SettingsView/DetailView 自身が overflowY:auto の 100vh コンテナなので、body ではなく #root 直下の実コンテンツ高さを見る
+async function measureContentHeight(win: BrowserWindow): Promise<number> {
+  return win.webContents.executeJavaScript(
+    '(document.getElementById("root")?.firstElementChild?.scrollHeight ?? document.body.scrollHeight)'
+  ) as Promise<number>
+}
+
+/** ウィンドウ固定サイズより中身が縦に伸びる画面（設定・使用履歴チャート展開時）を、全体が収まる高さまでリサイズしてから撮る。 */
+async function captureFullPage(win: BrowserWindow, filePath: string): Promise<void> {
+  await sleep(400)
+  const [w] = win.getContentSize()
+  const height = await measureContentHeight(win)
+  // macOS はウィンドウ位置によって setContentSize の高さを画面ワークエリア内に収めようとするため、
+  // まず画面上端へ寄せてから伸ばすと、より高いところまでクランプされずに広げられる。
+  win.setPosition(win.getPosition()[0], 0)
+  win.setContentSize(w, Math.max(560, Math.ceil(height)))
+  await sleep(250)
+  await captureWindow(win, filePath, 250)
+}
+
+async function clickButtonContaining(win: BrowserWindow, candidates: string[]): Promise<void> {
+  await win.webContents.executeJavaScript(`
+    (() => {
+      const candidates = ${JSON.stringify(candidates)};
+      const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent && candidates.some(c => b.textContent.includes(c)));
+      if (btn) btn.click();
+    })();
+  `)
+}
+
+async function runScreenshotMode(): Promise<void> {
+  const outDir = join(app.getAppPath(), 'docs', 'screenshots', SCREENSHOT_LOCALE.startsWith('ja') ? 'ja' : 'en')
+  mkdirSync(outDir, { recursive: true })
+
+  const settings = buildScreenshotSettings(loadSettings())
+  saveSettings(settings)
+
+  lastUsage = buildScreenshotUsage()
+  lastProfile = buildScreenshotProfile()
+  lastBeta = buildScreenshotBeta()
+  lastCcPace = buildScreenshotCcPace()
+  lastSuccessAt = new Date()
+  debugSeedHistory(buildScreenshotHistory())
+
+  hudWindow = createHudWindow()
+  hudWindow.show()
+  await sleep(500)
+  sendToHud(false) // lastSuccessAt 等をレンダラーへ push（初回 getUsage() には含まれないため）
+  await sleep(100)
+  await captureWindow(hudWindow, join(outDir, 'compact.png'))
+
+  switchViewMode('ultra')
+  await captureWindow(hudWindow, join(outDir, 'ultra.png'))
+
+  switchViewMode('detail')
+  await sleep(300)
+  await clickButtonContaining(hudWindow, ['Usage History', '使用履歴'])
+  await sleep(500)
+  // 履歴チャートを開くとウィンドウ固定サイズより中身が縦に伸びるため、撮影時だけ全体が入る高さへ広げる
+  await captureFullPage(hudWindow, join(outDir, 'detail.png'))
+
+  openSettingsWindow()
+  await sleep(500)
+  if (settingsWindow) await captureFullPage(settingsWindow, join(outDir, 'settings.png'))
+
+  log('Screenshot mode complete:', outDir)
+}
+
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
@@ -860,9 +1095,15 @@ if (!gotTheLock) {
     }
   })
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     app.setName('Claude Usage HUD')
     app.dock?.hide()
+
+    if (SCREENSHOT_MODE) {
+      await runScreenshotMode()
+      app.quit()
+      return
+    }
 
     claudeWebFetcher.setLogCallback(log)
     copilotFetcher.setLogCallback(log)
