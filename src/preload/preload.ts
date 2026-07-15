@@ -49,4 +49,6 @@ contextBridge.exposeInMainWorld('api', {
   hideCopilotLoginWindow: () => ipcRenderer.invoke('hide-copilot-login-window'),
   showCodexLoginWindow: () => ipcRenderer.invoke('show-codex-login-window'),
   hideCodexLoginWindow: () => ipcRenderer.invoke('hide-codex-login-window'),
+  // Debug only (no-ops in packaged builds) — see src/main/main.ts `debug-set-mock-usage`
+  debugSetMockUsage: (payload: unknown) => ipcRenderer.invoke('debug-set-mock-usage', payload),
 })

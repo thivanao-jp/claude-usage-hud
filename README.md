@@ -8,6 +8,34 @@ A lightweight desktop HUD that keeps your Claude usage visible at all times — 
 
 ---
 
+## Screenshots
+
+<table>
+<tr>
+<td align="center" width="50%">
+<img src="docs/screenshots/en/compact.png" width="280" alt="Compact View"><br>
+<sub><b>Compact View</b> — always-on-top usage bars</sub>
+</td>
+<td align="center" width="50%">
+<img src="docs/screenshots/en/ultra.png" width="280" alt="Ultra Compact View"><br>
+<sub><b>Ultra Compact</b> — minimal menu-bar-corner strip</sub>
+</td>
+</tr>
+<tr>
+<td align="center" width="50%">
+<img src="docs/screenshots/en/detail.png" width="280" alt="Detail View"><br>
+<sub><b>Detail View</b> — full usage cards + history chart</sub>
+</td>
+<td align="center" width="50%">
+<img src="docs/screenshots/en/settings.png" width="280" alt="Settings">
+<br>
+<sub><b>Settings</b> — providers, tray display, alerts</sub>
+</td>
+</tr>
+</table>
+
+---
+
 ## Features
 
 ### Compact View
