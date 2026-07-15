@@ -1016,18 +1016,31 @@ async function measureContentHeight(win: BrowserWindow): Promise<number> {
   ) as Promise<number>
 }
 
-/** ウィンドウ固定サイズより中身が縦に伸びる画面（設定・使用履歴チャート展開時）を、全体が収まる高さまでリサイズしてから撮る。 */
+/**
+ * ウィンドウ固定サイズより中身が縦に伸びる画面（設定・使用履歴チャート展開時）を、全体が収まる高さまでリサイズしてから撮る。
+ * macOS はウィンドウの高さを画面のワークエリア内に収まるようクランプするため（実測: 高さ1700超の要求が~1014pt相当まで
+ * クランプされた）、それを超える高さが必要な場合はページ全体が1枚に収まるようズームを下げてから撮影する
+ * （言語によって文言の折り返しでコンテンツの高さが変わり、日本語版だけワークエリアを超えて途中で切れることがあった）。
+ */
 async function captureFullPage(win: BrowserWindow, filePath: string): Promise<void> {
   await sleep(400)
   const [w] = win.getContentSize()
-  const height = await measureContentHeight(win)
-  // macOS はウィンドウの高さを画面のワークエリア内に収まるようクランプすることがある
-  // （実測: 高さ1700超の要求が~1014pt相当までクランプされた）。画面上端へ寄せておくが、
-  // それでもクランプされる場合はコンテンツの先頭〜クランプされた高さまでのみ撮影される。
   win.setPosition(win.getPosition()[0], 0)
-  win.setContentSize(w, Math.max(560, Math.ceil(height)))
+  const maxDip = Math.max(560, screen.getDisplayMatching(win.getBounds()).workAreaSize.height - 20)
+
+  const contentHeight = await measureContentHeight(win) // zoom=1 の実測CSS px高さ（ズームを変えてもこの値自体はほぼ変わらない）
+  let zoom = 1
+  let targetHeight = Math.ceil(contentHeight)
+  if (targetHeight > maxDip) {
+    zoom = Math.max(0.5, (maxDip - 10) / contentHeight)
+    win.webContents.setZoomFactor(zoom)
+    await sleep(200)
+    targetHeight = Math.min(maxDip, Math.ceil(contentHeight * zoom))
+  }
+  win.setContentSize(w, targetHeight)
   await sleep(250)
   await captureWindow(win, filePath, 250)
+  if (zoom !== 1) win.webContents.setZoomFactor(1)
 }
 
 async function clickButtonContaining(win: BrowserWindow, candidates: string[]): Promise<void> {
