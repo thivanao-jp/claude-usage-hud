@@ -10,6 +10,7 @@ function formatCodexWindow(minutes: number | null): string {
 }
 import { calcPacePct } from '../paceUtil'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
+import { CODEX_CREDITS_COLOR, formatCreditBalance, hasCodexCredits } from '../codexCredits'
 
 interface Props {
   usage: UsageData | null
@@ -30,6 +31,8 @@ interface BarDef {
   resetAt: string | null
   periodMs: number | null
   warning?: boolean
+  /** 指定時は `pct%` の代わりにこの文字列を出す（残高など割合でない値） */
+  valueText?: string
 }
 
 function formatRelCompact(iso: string | null): string {
@@ -139,6 +142,18 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
         periodMs: (d.secondaryWindowMinutes ?? 7 * 24 * 60) * 60_000,
       })
     }
+    if ((settings.tray.showCodexCredits ?? true) && hasCodexCredits(d)) {
+      // 残高には分母がないので、バーは塗らず数値だけを出す。
+      barDefs.push({
+        key: 'codex-credits',
+        label: 'CxEX',
+        color: CODEX_CREDITS_COLOR,
+        pct: 0,
+        resetAt: null,
+        periodMs: null,
+        valueText: `${formatCreditBalance(d)}cr`,
+      })
+    }
   }
 
 
@@ -226,7 +241,7 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
                 <span style={{ width: 24, flexShrink: 0 }}>{item.warning ? '🔥' : item.label}</span>
                 <span style={{ flex: 1 }} />
                 <span style={{ marginRight: 4 }}>{rel}</span>
-                <span style={{ minWidth: 26, textAlign: 'right' }}>{item.pct}%</span>
+                <span style={{ minWidth: 26, textAlign: 'right' }}>{item.valueText ?? `${item.pct}%`}</span>
               </div>
             </div>
           )

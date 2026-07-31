@@ -13,6 +13,10 @@ export interface CodexUsageData {
   primaryWindowMinutes: number | null
   secondaryWindowMinutes: number | null
   planType: string | null
+  /** 購入済み追加クレジットの残高。unlimited 時や未提供時は null */
+  creditBalance: number | null
+  creditsUnlimited: boolean
+  hasCredits: boolean
 }
 
 export type CodexLoginStatus = 'logged-in' | 'logged-out' | 'unknown'
@@ -188,6 +192,7 @@ export class CodexFetcher {
     const secondary = parseWindow(bucket['secondary'])
     const base = secondary ?? primary
     if (!base) return null
+    const credits = this.parseCredits(bucket['credits'])
     return {
       used: Math.round(base.utilization), limit: 100, utilization: base.utilization,
       resetDate: base.resetDate, unit: this.windowLabel(base.minutes),
@@ -196,6 +201,27 @@ export class CodexFetcher {
       primaryWindowMinutes: primary?.minutes ?? null,
       secondaryWindowMinutes: secondary?.minutes ?? null,
       planType,
+      ...credits,
+    }
+  }
+
+  /**
+   * 追加購入クレジットの残高。
+   *
+   * balance は `"222.6778700000"` のような文字列で来る（数値で来る場合にも備える）。
+   * unlimited なアカウントでは balance が意味を持たないので null に落とす。
+   */
+  private parseCredits(value: unknown): Pick<CodexUsageData, 'creditBalance' | 'creditsUnlimited' | 'hasCredits'> {
+    if (!value || typeof value !== 'object') {
+      return { creditBalance: null, creditsUnlimited: false, hasCredits: false }
+    }
+    const credits = value as Record<string, unknown>
+    const unlimited = credits['unlimited'] === true
+    const balance = Number(credits['balance'])
+    return {
+      creditBalance: !unlimited && Number.isFinite(balance) ? balance : null,
+      creditsUnlimited: unlimited,
+      hasCredits: credits['hasCredits'] === true || unlimited,
     }
   }
 

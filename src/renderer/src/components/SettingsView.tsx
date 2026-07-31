@@ -219,6 +219,7 @@ export function SettingsView({ onSettingsChange }: Props) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <CheckRow label={t('codexPrimary')} checked={s.tray.showCodexPrimary ?? true} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showCodexPrimary: v } }))} th={th} />
           <CheckRow label={t('codexSecondary')} checked={s.tray.showCodexSecondary ?? true} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showCodexSecondary: v } }))} th={th} />
+          <CheckRow label={t('codexCredits')} checked={s.tray.showCodexCredits ?? true} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showCodexCredits: v } }))} th={th} />
         </div>
       </Section>
 

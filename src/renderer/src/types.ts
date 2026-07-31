@@ -60,6 +60,7 @@ export interface Settings {
     showFields: Record<string, boolean>  // key = WeeklyFieldDef.key
     showCodexPrimary?: boolean
     showCodexSecondary?: boolean
+    showCodexCredits?: boolean
     // deprecated (migration用、削除しない)
     show7d?: boolean
     showOauth?: boolean
@@ -113,6 +114,10 @@ export interface CodexUsageData {
   primaryWindowMinutes: number | null
   secondaryWindowMinutes: number | null
   planType: string | null
+  /** 購入済み追加クレジットの残高。unlimited 時や未提供時は null */
+  creditBalance: number | null
+  creditsUnlimited: boolean
+  hasCredits: boolean
 }
 
 export interface BetaProvidersData {

@@ -21,6 +21,7 @@ export interface Settings {
     showFields: Record<string, boolean>  // key = WeeklyFieldDef.key
     showCodexPrimary?: boolean
     showCodexSecondary?: boolean
+    showCodexCredits?: boolean
     // deprecated (migration用、削除しない)
     show7d?: boolean
     showOauth?: boolean
@@ -86,6 +87,7 @@ const defaultSettings: Settings = {
     },
     showCodexPrimary: true,
     showCodexSecondary: true,
+    showCodexCredits: true,
   },
   window: {
     opacity: 90,
