@@ -151,7 +151,7 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
         pct: 0,
         resetAt: null,
         periodMs: null,
-        valueText: `${formatCreditBalance(d)}cr`,
+        valueText: formatCreditBalance(d, { unit: 'cr' }),
       })
     }
   }

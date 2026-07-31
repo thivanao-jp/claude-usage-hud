@@ -174,7 +174,7 @@ export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, c
           {(beta.codex?.secondaryWindowMinutes != null || beta.codex?.fiveHourUtilization == null) && (
             <BetaUsageCard label={beta.codex?.fiveHourUtilization != null ? `OpenAI Codex (${formatCodexWindow(beta.codex.secondaryWindowMinutes)})` : 'OpenAI Codex'} data={beta.codex} color="#10a37f" unit={beta.codex?.unit ?? '%'} experimental={false} />
           )}
-          {hasCodexCredits(beta.codex) && <CodexCreditsCard codex={beta.codex!} />}
+          {hasCodexCredits(beta.codex) && <CodexCreditsCard codex={beta.codex} />}
         </div>
       )}
 
@@ -309,7 +309,7 @@ function CodexCreditsCard({ codex }: { codex: CodexUsageData }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: th.textSub }}>{t('labelCodexCredits')}</span>
         <span style={{ fontSize: 16, fontWeight: 700, color: CODEX_CREDITS_COLOR }}>
-          {formatCreditBalance(codex, t('creditsUnlimited'))}
+          {formatCreditBalance(codex, { unlimitedLabel: t('creditsUnlimited') })}
         </span>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>

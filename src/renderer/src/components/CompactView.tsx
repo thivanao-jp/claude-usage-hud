@@ -408,7 +408,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccP
                   <div style={barTextStyle}>
                     <span style={{ width: 56, flexShrink: 0, fontSize: 9, overflow: 'hidden', whiteSpace: 'nowrap' }}>Cdx EX</span>
                     <span style={{ flex: 1 }}>{t('creditsRemaining')}</span>
-                    <span style={{ color: CODEX_CREDITS_COLOR }}>{formatCreditBalance(d!, t('creditsUnlimited'))}cr</span>
+                    <span style={{ color: CODEX_CREDITS_COLOR }}>{formatCreditBalance(d, { unlimitedLabel: t('creditsUnlimited'), unit: 'cr' })}</span>
                   </div>
                 </div>
               )}

@@ -217,12 +217,24 @@ export class CodexFetcher {
     }
     const credits = value as Record<string, unknown>
     const unlimited = credits['unlimited'] === true
-    const balance = Number(credits['balance'])
     return {
-      creditBalance: !unlimited && Number.isFinite(balance) ? balance : null,
+      creditBalance: unlimited ? null : this.parseBalance(credits['balance']),
       creditsUnlimited: unlimited,
       hasCredits: credits['hasCredits'] === true || unlimited,
     }
+  }
+
+  /**
+   * 残高を数値化する。
+   *
+   * `Number(null)` と `Number('')` は 0 になるので、素直に Number() へ通すと
+   * 「値が来なかった」が「残高ゼロ」として表示されてしまう。型を絞ってから変換する。
+   */
+  private parseBalance(value: unknown): number | null {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null
+    if (typeof value !== 'string' || value.trim() === '') return null
+    const balance = Number(value)
+    return Number.isFinite(balance) ? balance : null
   }
 
   private windowLabel(minutes: number | null): string {
