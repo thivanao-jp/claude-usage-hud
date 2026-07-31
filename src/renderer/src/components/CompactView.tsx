@@ -4,7 +4,7 @@ import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { calcPacePct } from '../paceUtil'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
-import { calcCreditGauge, creditThresholdsOf, formatCreditBalanceOverMax, formatGaugePct, hasCodexCredits } from '../codexCredits'
+import { calcCreditGauge, creditThresholdsOf, formatCreditBalance, formatGaugePct, hasCodexCredits } from '../codexCredits'
 
 interface Props {
   usage: UsageData | null
@@ -417,7 +417,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccP
                     }} />
                     <div style={barTextStyle}>
                       <span style={{ width: 56, flexShrink: 0, fontSize: 9, overflow: 'hidden', whiteSpace: 'nowrap' }}>Cdx EX</span>
-                      <span style={{ flex: 1 }}>{formatCreditBalanceOverMax(d, gauge, { unlimitedLabel: t('creditsUnlimited'), unit: 'cr' })}</span>
+                      <span style={{ flex: 1 }}>{formatCreditBalance(d, { unlimitedLabel: t('creditsUnlimited'), unit: 'cr' })}</span>
                       <span>{formatGaugePct(d, gauge)}</span>
                     </div>
                   </div>

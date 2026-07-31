@@ -5,7 +5,7 @@ import { HistoryChart } from './HistoryChart'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
-import { calcCreditGauge, creditThresholdsOf, formatCreditBalance, hasCodexCredits, CreditThresholds } from '../codexCredits'
+import { calcCreditGauge, creditThresholdsOf, formatCreditBalance, formatCreditBand, hasCodexCredits, CreditThresholds } from '../codexCredits'
 import { useLang } from '../LangContext'
 
 const HOUR = 60 * 60 * 1000
@@ -298,6 +298,7 @@ function CodexCreditsCard({ codex, thresholds }: { codex: CodexUsageData; thresh
   const t = useT()
   const th = useTheme()
   const gauge = calcCreditGauge(codex, thresholds)
+  const band = formatCreditBand(gauge)
 
   return (
     <div style={{
@@ -320,9 +321,9 @@ function CodexCreditsCard({ codex, thresholds }: { codex: CodexUsageData; thresh
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
         <span style={{ color: th.textMuted }}>
-          {gauge.gaugeMax != null
-            ? t('creditsGaugeMax', gauge.gaugeMax.toLocaleString())
-            : t('creditsGaugeAbove', thresholds.high.toLocaleString())}
+          {band.ceiling != null
+            ? t('creditsBand', band.floor, band.ceiling)
+            : t('creditsBandTop', band.floor)}
         </span>
         <span style={{ color: th.textMuted }}>{t('creditsRemaining')}</span>
       </div>
