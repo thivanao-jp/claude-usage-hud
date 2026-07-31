@@ -13,6 +13,10 @@ export interface CodexUsageData {
   primaryWindowMinutes: number | null
   secondaryWindowMinutes: number | null
   planType: string | null
+  /** 購入済み追加クレジットの残高。unlimited 時や未提供時は null */
+  creditBalance: number | null
+  creditsUnlimited: boolean
+  hasCredits: boolean
 }
 
 export type CodexLoginStatus = 'logged-in' | 'logged-out' | 'unknown'
@@ -188,6 +192,7 @@ export class CodexFetcher {
     const secondary = parseWindow(bucket['secondary'])
     const base = secondary ?? primary
     if (!base) return null
+    const credits = this.parseCredits(bucket['credits'])
     return {
       used: Math.round(base.utilization), limit: 100, utilization: base.utilization,
       resetDate: base.resetDate, unit: this.windowLabel(base.minutes),
@@ -196,7 +201,40 @@ export class CodexFetcher {
       primaryWindowMinutes: primary?.minutes ?? null,
       secondaryWindowMinutes: secondary?.minutes ?? null,
       planType,
+      ...credits,
     }
+  }
+
+  /**
+   * 追加購入クレジットの残高。
+   *
+   * balance は `"222.6778700000"` のような文字列で来る（数値で来る場合にも備える）。
+   * unlimited なアカウントでは balance が意味を持たないので null に落とす。
+   */
+  private parseCredits(value: unknown): Pick<CodexUsageData, 'creditBalance' | 'creditsUnlimited' | 'hasCredits'> {
+    if (!value || typeof value !== 'object') {
+      return { creditBalance: null, creditsUnlimited: false, hasCredits: false }
+    }
+    const credits = value as Record<string, unknown>
+    const unlimited = credits['unlimited'] === true
+    return {
+      creditBalance: unlimited ? null : this.parseBalance(credits['balance']),
+      creditsUnlimited: unlimited,
+      hasCredits: credits['hasCredits'] === true || unlimited,
+    }
+  }
+
+  /**
+   * 残高を数値化する。
+   *
+   * `Number(null)` と `Number('')` は 0 になるので、素直に Number() へ通すと
+   * 「値が来なかった」が「残高ゼロ」として表示されてしまう。型を絞ってから変換する。
+   */
+  private parseBalance(value: unknown): number | null {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null
+    if (typeof value !== 'string' || value.trim() === '') return null
+    const balance = Number(value)
+    return Number.isFinite(balance) ? balance : null
   }
 
   private windowLabel(minutes: number | null): string {

@@ -5,6 +5,7 @@ import { HistoryChart } from './HistoryChart'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
+import { calcCreditGauge, creditGaugeMaxOf, formatCreditBalance, hasCodexCredits } from '../codexCredits'
 import { useLang } from '../LangContext'
 
 const HOUR = 60 * 60 * 1000
@@ -166,13 +167,14 @@ export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, c
           {beta.codex?.fiveHourUtilization != null && (
             <BetaUsageCard
               label={`OpenAI Codex (${formatCodexWindow(beta.codex.primaryWindowMinutes)})`}
-              data={{ used: Math.round(beta.codex.fiveHourUtilization), limit: 100, utilization: beta.codex.fiveHourUtilization, resetDate: beta.codex.fiveHourResetDate, unit: formatCodexWindow(beta.codex.primaryWindowMinutes), fiveHourUtilization: null, fiveHourResetDate: null, primaryWindowMinutes: null, secondaryWindowMinutes: null, planType: beta.codex.planType }}
+              data={{ ...beta.codex, used: Math.round(beta.codex.fiveHourUtilization), limit: 100, utilization: beta.codex.fiveHourUtilization, resetDate: beta.codex.fiveHourResetDate, unit: formatCodexWindow(beta.codex.primaryWindowMinutes), fiveHourUtilization: null, fiveHourResetDate: null, primaryWindowMinutes: null, secondaryWindowMinutes: null }}
               color="#10a37f" unit={formatCodexWindow(beta.codex.primaryWindowMinutes)} experimental={false}
             />
           )}
           {(beta.codex?.secondaryWindowMinutes != null || beta.codex?.fiveHourUtilization == null) && (
             <BetaUsageCard label={beta.codex?.fiveHourUtilization != null ? `OpenAI Codex (${formatCodexWindow(beta.codex.secondaryWindowMinutes)})` : 'OpenAI Codex'} data={beta.codex} color="#10a37f" unit={beta.codex?.unit ?? '%'} experimental={false} />
           )}
+          {hasCodexCredits(beta.codex) && <CodexCreditsCard codex={beta.codex} gaugeMax={creditGaugeMaxOf(settings)} />}
         </div>
       )}
 
@@ -282,6 +284,47 @@ function ExtraUsageCard({ extra }: { extra: ExtraUsage }) {
         <span style={{ color: th.textMuted }}>{t('monthlyReset')}</span>
       </div>
       <div style={{ fontSize: 10, color: th.textDesc, marginTop: 3 }}>{t('descExtra')}</div>
+    </div>
+  )
+}
+
+/**
+ * Codex の追加購入クレジット残高。
+ *
+ * Claude の Extra Usage カードと同じ見た目に揃えているが、Codex 側は
+ * 「使った量 / 上限」ではなく残高しか返さないため、割合バーは出さない。
+ */
+function CodexCreditsCard({ codex, gaugeMax }: { codex: CodexUsageData; gaugeMax: number }) {
+  const t = useT()
+  const th = useTheme()
+  const gauge = calcCreditGauge(codex, gaugeMax)
+
+  return (
+    <div style={{
+      background: th.bgCardExtra,
+      border: `1px solid ${th.borderCardExtra}`,
+      borderRadius: 8,
+      padding: '8px 10px',
+      marginBottom: 6
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: th.textSub }}>{t('labelCodexCredits')}</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: gauge.color }}>
+          {formatCreditBalance(codex, { unlimitedLabel: t('creditsUnlimited') })}
+        </span>
+      </div>
+      <div style={{
+        background: th.bgBar, borderRadius: 3, height: 5, marginBottom: 6, overflow: 'hidden'
+      }}>
+        <div style={{ width: `${gauge.pct}%`, height: '100%', background: gauge.color, borderRadius: 3, transition: 'width 0.4s ease, background 0.4s ease' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+        <span style={{ color: th.textMuted }}>
+          {t('creditsGaugeMax', gauge.gaugeMax.toLocaleString())}
+        </span>
+        <span style={{ color: th.textMuted }}>{t('creditsRemaining')}</span>
+      </div>
+      <div style={{ fontSize: 10, color: th.textDesc, marginTop: 3 }}>{t('descCodexCredits')}</div>
     </div>
   )
 }

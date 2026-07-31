@@ -10,6 +10,7 @@ function formatCodexWindow(minutes: number | null): string {
 }
 import { calcPacePct } from '../paceUtil'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
+import { calcCreditGauge, creditGaugeMaxOf, formatCreditBalance, hasCodexCredits } from '../codexCredits'
 
 interface Props {
   usage: UsageData | null
@@ -30,6 +31,13 @@ interface BarDef {
   resetAt: string | null
   periodMs: number | null
   warning?: boolean
+  /** 指定時は `pct%` の代わりにこの文字列を出す（残高など割合でない値） */
+  valueText?: string
+  /**
+   * 使用率ベースの警告色（70%/90%で黄・橙）を当てず color をそのまま使う。
+   * 残高バーは「塗りが多い＝残っている」で意味が逆なので、警告色を当てると誤解を招く。
+   */
+  fixedColor?: boolean
 }
 
 function formatRelCompact(iso: string | null): string {
@@ -139,6 +147,21 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
         periodMs: (d.secondaryWindowMinutes ?? 7 * 24 * 60) * 60_000,
       })
     }
+    if ((settings.tray.showCodexCredits ?? true) && hasCodexCredits(d)) {
+      // 残高には分母がないので、設定した目安上限を仮の分母にして「どれだけ減ったか」を塗る。
+      // 幅が狭いので、割合ではなく残高そのものを数値として出す。
+      const gauge = calcCreditGauge(d, creditGaugeMaxOf(settings))
+      barDefs.push({
+        key: 'codex-credits',
+        label: 'CxEX',
+        color: gauge.color,
+        pct: gauge.pct,
+        resetAt: null,
+        periodMs: null,
+        valueText: formatCreditBalance(d, { unit: 'cr' }),
+        fixedColor: true,
+      })
+    }
   }
 
 
@@ -182,7 +205,7 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
       {/* Bars */}
       <div style={{ padding: '0 4px 4px' }}>
         {barDefs.map((item, i) => {
-          const barColor = item.pct >= 90 ? '#e05a2b' : item.pct >= 70 ? '#e0a12b' : item.color
+          const barColor = item.fixedColor ? item.color : item.pct >= 90 ? '#e05a2b' : item.pct >= 70 ? '#e0a12b' : item.color
           const rel = formatRelCompact(item.resetAt)
           const isLast = i === barDefs.length - 1
           const pacePct = (item.resetAt && item.periodMs)
@@ -226,7 +249,7 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
                 <span style={{ width: 24, flexShrink: 0 }}>{item.warning ? '🔥' : item.label}</span>
                 <span style={{ flex: 1 }} />
                 <span style={{ marginRight: 4 }}>{rel}</span>
-                <span style={{ minWidth: 26, textAlign: 'right' }}>{item.pct}%</span>
+                <span style={{ minWidth: 26, textAlign: 'right' }}>{item.valueText ?? `${item.pct}%`}</span>
               </div>
             </div>
           )

@@ -122,7 +122,7 @@ const ULTRA_BAR_H = 18     // 16px bar + 2px margin
 const ULTRA_HANDLE_H = 4
 const ULTRA_PAD = 4        // bottom padding
 
-function getCompactHeight(settings: Settings, ccPace?: CcPaceData | null): number {
+function getCompactHeight(settings: Settings, ccPace?: CcPaceData | null, beta?: BetaProvidersData | null): number {
   const showFields = settings.tray.showFields ?? {}
   const bp = settings.betaProviders ?? {}
   const count = [
@@ -132,14 +132,18 @@ function getCompactHeight(settings: Settings, ccPace?: CcPaceData | null): numbe
     bp.copilot?.enabled ?? false,
     settings.codex?.enabled && (settings.tray.showCodexPrimary ?? true),
     settings.codex?.enabled && (settings.tray.showCodexSecondary ?? true),
+    // 残高行はクレジットを持つアカウントでのみ出るので、データ確認後にだけ数える
+    settings.codex?.enabled && (settings.tray.showCodexCredits ?? true) && (beta?.codex?.hasCredits ?? false),
   ].filter(Boolean).length || 1
   const ccPaceExtra = (settings.tray.show5h && ccPace?.available && ccPace.burnRatePerMin != null) ? COMPACT_CCPACE_H : 0
   return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD + ccPaceExtra
 }
 
-function getDetailHeight(settings: Settings): number {
+function getDetailHeight(settings: Settings, beta?: BetaProvidersData | null): number {
   const bp = settings.betaProviders ?? {}
-  const betaCount = (bp.copilot?.enabled ? 1 : 0) + (settings.codex?.enabled ? 2 : 0)
+  // 残高カードはクレジットを持つアカウントでのみ出る（詳細表示はトレイのトグルに従わない）
+  const codexCredits = settings.codex?.enabled && beta?.codex?.hasCredits ? 1 : 0
+  const betaCount = (bp.copilot?.enabled ? 1 : 0) + (settings.codex?.enabled ? 2 : 0) + codexCredits
   return DETAIL_H_BASE + betaCount * DETAIL_BETA_H
 }
 
@@ -159,6 +163,8 @@ function getUltraHeight(settings: Settings, usage?: UsageData | null, beta?: Bet
     // 5h bar: only when data confirms it exists
     if ((settings.tray.showCodexPrimary ?? true) && (!beta || !beta.codex || beta.codex.fiveHourUtilization != null)) count++
     if (settings.tray.showCodexSecondary ?? true) count++
+    // 残高行はクレジットを持つアカウントでのみ出るので、データ確認後にだけ数える
+    if ((settings.tray.showCodexCredits ?? true) && beta?.codex?.hasCredits) count++
   }
   count = Math.max(count, 1)
   return ULTRA_HANDLE_H + count * ULTRA_BAR_H - 2 + ULTRA_PAD
@@ -166,8 +172,8 @@ function getUltraHeight(settings: Settings, usage?: UsageData | null, beta?: Bet
 
 function getWindowSize(mode: ViewMode, settings: Settings, usage?: UsageData | null, beta?: BetaProvidersData | null, ccPace?: CcPaceData | null): { w: number; h: number } {
   if (mode === 'ultra')   return { w: ULTRA_W, h: getUltraHeight(settings, usage, beta) }
-  if (mode === 'compact') return { w: COMPACT_W, h: getCompactHeight(settings, ccPace) }
-  return { w: DETAIL_W, h: getDetailHeight(settings) }
+  if (mode === 'compact') return { w: COMPACT_W, h: getCompactHeight(settings, ccPace, beta) }
+  return { w: DETAIL_W, h: getDetailHeight(settings, beta) }
 }
 
 function getUltraSnapPosition(pos: UltraPosition, w: number, existingWin?: BrowserWindow | null): { x: number; y: number } {
@@ -928,6 +934,7 @@ function buildScreenshotSettings(base: Settings): Settings {
       },
       showCodexPrimary: true,
       showCodexSecondary: true,
+      showCodexCredits: true,
     },
     window: { ...base.window, ultraPosition: 'top-right' },
     betaProviders: { copilot: { enabled: true } },
@@ -961,6 +968,7 @@ function buildScreenshotBeta(): BetaProvidersData {
       used: 52, limit: 100, utilization: 52, resetDate: isoInHours(2 * 24), unit: '7d',
       fiveHourUtilization: 35, fiveHourResetDate: isoInHours(2.1),
       primaryWindowMinutes: 300, secondaryWindowMinutes: 10080, planType: 'plus',
+      creditBalance: 222.68, creditsUnlimited: false, hasCredits: true,
     },
   }
 }

@@ -4,6 +4,7 @@ import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { calcPacePct } from '../paceUtil'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
+import { calcCreditGauge, creditGaugeMaxOf, formatCreditBalance, formatGaugePct, hasCodexCredits } from '../codexCredits'
 
 interface Props {
   usage: UsageData | null
@@ -393,6 +394,35 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccP
               {(settings.tray.showCodexSecondary ?? true) && (d?.secondaryWindowMinutes != null || d?.fiveHourUtilization == null) && (
                 <BetaBar label={`Cdx ${windowLabel(d?.secondaryWindowMinutes ?? null)}`} pct={pct7} barColor={color7} reset={reset7} hasData={d != null} pacePct={pace7} />
               )}
+              {(settings.tray.showCodexCredits ?? true) && hasCodexCredits(d) && (() => {
+                // 残高には分母がないので、設定した目安上限を仮の分母にして「どれだけ減ったか」を塗る。
+                const gauge = calcCreditGauge(d, creditGaugeMaxOf(settings))
+                return (
+                  <div style={{
+                    position: 'relative',
+                    height: 28,
+                    borderRadius: 4,
+                    overflow: 'hidden',
+                    marginBottom: 4,
+                    background: th.bgBar,
+                    WebkitAppRegion: barRegion as any,
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: `${gauge.pct}%`,
+                      background: gauge.color,
+                      borderRadius: 4,
+                      transition: 'width 0.4s ease, background 0.4s ease',
+                    }} />
+                    <div style={barTextStyle}>
+                      <span style={{ width: 56, flexShrink: 0, fontSize: 9, overflow: 'hidden', whiteSpace: 'nowrap' }}>Cdx EX</span>
+                      <span style={{ flex: 1 }}>{formatCreditBalance(d, { unlimitedLabel: t('creditsUnlimited'), unit: 'cr' })}</span>
+                      <span>{formatGaugePct(d, gauge)}</span>
+                    </div>
+                  </div>
+                )
+              })()}
             </>
           )
         })()}

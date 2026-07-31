@@ -4,6 +4,7 @@ import { CompactView } from './components/CompactView'
 import { UltraCompactView } from './components/UltraCompactView'
 import { SettingsView } from './components/SettingsView'
 import { UsageData, ProfileData, Settings, ViewMode, BetaProvidersData, CcPaceData } from './types'
+import { DEFAULT_CREDIT_GAUGE_MAX } from './codexCredits'
 import { LangContext, useT } from './LangContext'
 import { ThemeContext } from './ThemeContext'
 import { resolveLang } from './i18n'
@@ -15,11 +16,11 @@ const defaultSettings: Settings = {
   viewMode: 'compact',
   language: 'auto',
   theme: 'auto',
-  tray: { show5h: true, show7d: true, showOauth: false, showOpus: false, showSonnet: false, showExtra: false, showFields: {}, showCodexPrimary: true, showCodexSecondary: true },
+  tray: { show5h: true, show7d: true, showOauth: false, showOpus: false, showSonnet: false, showExtra: false, showFields: {}, showCodexPrimary: true, showCodexSecondary: true, showCodexCredits: true },
   window: { opacity: 90, alwaysOnTop: true },
   alerts: {},
   pace: { workHoursOnly: false, workDayStart: 5, workDayEnd: 22, excludeWeekends: true },
-  codex: { enabled: false },
+  codex: { enabled: false, creditGaugeMax: DEFAULT_CREDIT_GAUGE_MAX },
 }
 
 function useResolvedTheme(themeSetting: ThemeSetting): ThemeTokens {

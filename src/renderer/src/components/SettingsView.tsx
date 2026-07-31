@@ -4,6 +4,7 @@ import { useT } from '../LangContext'
 import { useLang } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
+import { DEFAULT_CREDIT_GAUGE_MAX } from '../codexCredits'
 
 type ProviderStatus = 'logged-in' | 'logged-out' | 'unknown'
 
@@ -31,7 +32,7 @@ const defaultSettings: Settings = {
   window: { opacity: 90, alwaysOnTop: true },
   alerts: {},
   pace: { workHoursOnly: false, workDayStart: 5, workDayEnd: 22, excludeWeekends: true },
-  codex: { enabled: false },
+  codex: { enabled: false, creditGaugeMax: DEFAULT_CREDIT_GAUGE_MAX },
 }
 
 interface Props {
@@ -132,7 +133,7 @@ export function SettingsView({ onSettingsChange }: Props) {
         <div style={{ borderTop: `1px solid ${th.borderSection}`, marginTop: 12, paddingTop: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, marginBottom: 6 }}>OpenAI Codex</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <CheckRow label={t('betaCodexLabel')} checked={s.codex?.enabled ?? false} onChange={v => upd(p => ({ ...p, codex: { enabled: v } }))} th={th} />
+            <CheckRow label={t('betaCodexLabel')} checked={s.codex?.enabled ?? false} onChange={v => upd(p => ({ ...p, codex: { ...p.codex, enabled: v } }))} th={th} />
             <StatusDot status={codexStatus} t={t} />
             <button onClick={() => window.api.showCodexLoginWindow()} style={{ ...secondaryBtn, marginLeft: 'auto', fontSize: 11 }}>{t('betaLoginBtn')}</button>
           </div>
@@ -219,7 +220,20 @@ export function SettingsView({ onSettingsChange }: Props) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <CheckRow label={t('codexPrimary')} checked={s.tray.showCodexPrimary ?? true} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showCodexPrimary: v } }))} th={th} />
           <CheckRow label={t('codexSecondary')} checked={s.tray.showCodexSecondary ?? true} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showCodexSecondary: v } }))} th={th} />
+          <CheckRow label={t('codexCredits')} checked={s.tray.showCodexCredits ?? true} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showCodexCredits: v } }))} th={th} />
         </div>
+        <Label th={th}>{t('codexCreditGauge')}</Label>
+        <input
+          type="number"
+          min={1}
+          value={s.codex?.creditGaugeMax ?? DEFAULT_CREDIT_GAUGE_MAX}
+          onChange={e => {
+            const v = e.target.value === '' ? 0 : Number(e.target.value)
+            upd(p => ({ ...p, codex: { ...p.codex, enabled: p.codex?.enabled ?? false, creditGaugeMax: v } }))
+          }}
+          style={{ ...inputStyle, width: '100%' }}
+        />
+        <div style={{ fontSize: 11, color: th.textFaint2, marginTop: 6 }}>{t('codexCreditGaugeHint')}</div>
       </Section>
 
       {/* Update interval */}

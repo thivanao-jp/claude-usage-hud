@@ -60,6 +60,7 @@ export interface Settings {
     showFields: Record<string, boolean>  // key = WeeklyFieldDef.key
     showCodexPrimary?: boolean
     showCodexSecondary?: boolean
+    showCodexCredits?: boolean
     // deprecated (migration用、削除しない)
     show7d?: boolean
     showOauth?: boolean
@@ -89,7 +90,14 @@ export interface Settings {
   betaProviders?: {
     copilot?: { enabled: boolean }
   }
-  codex?: { enabled: boolean }
+  codex?: {
+    enabled: boolean
+    /**
+     * 追加クレジットバーの目安上限。Codex は残高しか返さず分母が無いので、
+     * この値を仮の分母にして「そこからどれだけ減ったか」を塗る。
+     */
+    creditGaugeMax?: number
+  }
 }
 
 // ---- Beta Providers ----
@@ -113,6 +121,10 @@ export interface CodexUsageData {
   primaryWindowMinutes: number | null
   secondaryWindowMinutes: number | null
   planType: string | null
+  /** 購入済み追加クレジットの残高。unlimited 時や未提供時は null */
+  creditBalance: number | null
+  creditsUnlimited: boolean
+  hasCredits: boolean
 }
 
 export interface BetaProvidersData {

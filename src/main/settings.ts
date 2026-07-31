@@ -21,6 +21,7 @@ export interface Settings {
     showFields: Record<string, boolean>  // key = WeeklyFieldDef.key
     showCodexPrimary?: boolean
     showCodexSecondary?: boolean
+    showCodexCredits?: boolean
     // deprecated (migration用、削除しない)
     show7d?: boolean
     showOauth?: boolean
@@ -50,7 +51,14 @@ export interface Settings {
   betaProviders?: {
     copilot?: { enabled: boolean }
   }
-  codex?: { enabled: boolean }
+  codex?: {
+    enabled: boolean
+    /**
+     * 追加クレジットバーの目安上限。Codex は残高しか返さず分母が無いので、
+     * この値を仮の分母にして「そこからどれだけ減ったか」を塗る。
+     */
+    creditGaugeMax?: number
+  }
   /** cc-pace-meter: 5h枠の推定上限のキャリブレーション結果（直近の信頼できる値を永続化） */
   ccPaceCalibration?: {
     estimatedLimitTokens: number
@@ -62,6 +70,9 @@ export interface Settings {
     updatedAt: string
   }
 }
+
+/** 追加クレジットの目安上限の既定値 */
+export const DEFAULT_CREDIT_GAUGE_MAX = 1000
 
 const defaultSettings: Settings = {
   token: '',
@@ -86,6 +97,7 @@ const defaultSettings: Settings = {
     },
     showCodexPrimary: true,
     showCodexSecondary: true,
+    showCodexCredits: true,
   },
   window: {
     opacity: 90,
@@ -99,7 +111,7 @@ const defaultSettings: Settings = {
     workDayEnd: 22,
     excludeWeekends: true,
   },
-  codex: { enabled: false },
+  codex: { enabled: false, creditGaugeMax: DEFAULT_CREDIT_GAUGE_MAX },
 }
 
 function settingsPath(): string {
@@ -120,6 +132,7 @@ export function loadSettings(): Settings {
       window: { ...defaultSettings.window, ...(saved.window ?? {}) },
       alerts: { ...defaultSettings.alerts, ...(saved.alerts ?? {}) },
       pace:   { ...defaultSettings.pace,   ...(saved.pace   ?? {}) },
+      codex:  { ...defaultSettings.codex,  ...(saved.codex  ?? {}) },
     }
     // 旧フォーマットからの移行
     if (!saved.tray?.showFields) {
@@ -136,7 +149,7 @@ export function loadSettings(): Settings {
       }
     }
     // v1.0: Codex はβプロバイダーから正式プロバイダー設定へ移行する。
-    if (!saved.codex && saved.betaProviders?.codex) merged.codex = saved.betaProviders.codex
+    if (!saved.codex && saved.betaProviders?.codex) merged.codex = { ...merged.codex, ...saved.betaProviders.codex }
     return merged
   } catch {
     return { ...defaultSettings }
