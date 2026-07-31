@@ -1,30 +1,23 @@
 import { CodexUsageData, Settings } from './types'
 
-/** 追加クレジットの目安上限の既定値（降順） */
-export const DEFAULT_CREDIT_THRESHOLDS = { high: 1000, mid: 500, low: 100 }
-
-export type CreditThresholds = typeof DEFAULT_CREDIT_THRESHOLDS
+/** 追加クレジットの目安上限の既定値 */
+export const DEFAULT_CREDIT_GAUGE_MAX = 1000
 
 /**
- * バー全体の色の道筋。各閾値がそのまま色のアンカーになる。
+ * バーの色の道筋。塗り 0%〜100% に等間隔で割り当てる。
  *
- *   残高 1000（塗り 0%）= 青 → 500（33%）= 緑 → 100（67%）= 黄 → 0（100%）= 赤
+ *   0%（残高＝目安上限）青 → 33% 緑 → 67% 黄 → 100%（残高ゼロ）赤
  *
- * 段ごとに「ベース色→赤」を往復させると段の境目で赤から緑へ飛んで見た目が跳ねるので、
- * 隣の段のベース色へ向けて繋ぎ、バー全体で 100% に近づくほど赤くなる一本の流れにしてある。
+ * 使い込むほど赤へ寄っていく一本の流れなので、途中で色が跳ねない。
  */
 const CREDIT_COLOR_RAMP = ['#4a9eff', '#54c98e', '#e0a12b', '#d92b2b'] as const
-const CREDIT_BAND_COUNT = CREDIT_COLOR_RAMP.length - 1
 
 export interface CreditGauge {
   /** 消費の進み具合（0〜100）。Claude のバーと同じく、使うほど増える */
   pct: number
   color: string
-  /**
-   * 残高が入っている段の範囲 `[下限, 上限]`。上限は最上段より多い場合 null（青天井）。
-   * 表示ラベル用で、塗りの計算そのものには使わない。
-   */
-  band: { floor: number; ceiling: number | null }
+  /** 塗りの分母に使った目安上限。表示ラベル用 */
+  gaugeMax: number
 }
 
 /**
@@ -37,58 +30,38 @@ export function hasCodexCredits(d: CodexUsageData | null | undefined): d is Code
   return !!d?.hasCredits
 }
 
-/**
- * 設定値を降順の3段階に正規化する。
- *
- * 設定画面で自由に数値を入れられるので、順序が入れ替わっていたり 0 以下だったりしても
- * 段が壊れないようにここで吸収する（不正な値はその段だけ既定値に戻す）。
- */
-export function normalizeCreditThresholds(thresholds?: Partial<CreditThresholds>): CreditThresholds {
-  const valid = (v: unknown, fallback: number): number =>
-    typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : fallback
-  const [high, mid, low] = [
-    valid(thresholds?.high, DEFAULT_CREDIT_THRESHOLDS.high),
-    valid(thresholds?.mid, DEFAULT_CREDIT_THRESHOLDS.mid),
-    valid(thresholds?.low, DEFAULT_CREDIT_THRESHOLDS.low),
-  ].sort((a, b) => b - a)
-  return { high, mid, low }
+/** 設定画面で自由に数値を入れられるので、0 以下や非数値は既定値に戻す */
+export function normalizeCreditGaugeMax(value?: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : DEFAULT_CREDIT_GAUGE_MAX
 }
 
-export function creditThresholdsOf(settings: Settings): CreditThresholds {
-  return normalizeCreditThresholds(settings.codex?.creditThresholds)
+export function creditGaugeMaxOf(settings: Settings): number {
+  return normalizeCreditGaugeMax(settings.codex?.creditGaugeMax)
 }
 
 /**
  * 残高からバーの塗り具合と色を決める。
  *
- * Codex は残高しか返さないので分母が無い。そこで閾値で区切った3つの段にバーを3等分して割り当て、
- * 「今どの段の、どこまで消費したか」を通しの割合として塗る。Claude のバーと向きを揃えてあるので、
- * 使い込むほど右へ伸びて % が上がり、段を跨いでもリセットしない。
+ * Codex は残高しか返さないので分母が無い。そこで設定した目安上限を仮の分母にして
+ * 「そこからどれだけ減ったか」を塗る。Claude のバーと向きを揃えてあるので、
+ * 使い込むほど右へ伸びて % が上がる。
  *
- * 例（閾値 1000/500/100）: 残高 750 は最上段の半分消費で 17%、残高 221.35 は中段を 70% 消費して 57%。
- * 色は青→緑→黄→赤の一本の流れで、閾値がそのままアンカーになる（[[CREDIT_COLOR_RAMP]] 参照）。
+ * 例（目安上限 1000）: 残高 750 で 25%、残高 221.35 で 78%、残高ゼロで 100%。
+ * 目安上限より残高が多いうちは 0%（まだ減り始めていない）。
  */
-export function calcCreditGauge(d: CodexUsageData, thresholds: CreditThresholds): CreditGauge {
-  const { high, mid, low } = thresholds
-  // unlimited は減らないので消費ゼロ扱い。残高不明も段を決めようがないので同じ扱いにする。
-  if (d.creditsUnlimited || d.creditBalance == null || d.creditBalance > high) {
-    return { pct: 0, color: CREDIT_COLOR_RAMP[0], band: { floor: high, ceiling: null } }
-  }
-  const balance = Math.max(0, d.creditBalance)
-  const [index, ceiling, floor] =
-    balance > mid ? [0, high, mid] :
-    balance > low ? [1, mid, low] :
-                    [2, low, 0]
+export function calcCreditGauge(d: CodexUsageData, gaugeMax: number): CreditGauge {
+  // unlimited は減らないので消費ゼロ扱い。残高不明も割合を出しようがないので同じ扱いにする。
+  const balance = d.creditsUnlimited ? gaugeMax : d.creditBalance
+  const pct = balance == null ? 0 : Math.max(0, Math.min(100, ((gaugeMax - balance) / gaugeMax) * 100))
+  return { pct, color: rampColor(pct / 100), gaugeMax }
+}
 
-  // 閾値が同値だと段の幅がゼロになるので、その段は消費しきったものとして扱う
-  const span = ceiling - floor
-  const progress = span > 0 ? Math.max(0, Math.min(1, (ceiling - balance) / span)) : 1
-
-  return {
-    pct: ((index + progress) / CREDIT_BAND_COUNT) * 100,
-    color: mixHex(CREDIT_COLOR_RAMP[index], CREDIT_COLOR_RAMP[index + 1], progress),
-    band: { floor, ceiling },
-  }
+/** ランプ上の t（0〜1）の位置の色を返す */
+function rampColor(t: number): string {
+  const segments = CREDIT_COLOR_RAMP.length - 1
+  const scaled = Math.max(0, Math.min(1, t)) * segments
+  const index = Math.min(Math.floor(scaled), segments - 1)
+  return mixHex(CREDIT_COLOR_RAMP[index], CREDIT_COLOR_RAMP[index + 1], scaled - index)
 }
 
 /**
@@ -164,14 +137,6 @@ export function formatCreditBalance(d: CodexUsageData, { unlimitedLabel = '∞',
 export function formatGaugePct(d: CodexUsageData, gauge: CreditGauge): string {
   if (d.creditsUnlimited || d.creditBalance == null) return ''
   return `${Math.round(gauge.pct)}%`
-}
-
-/** 残高が入っている段を `100〜500` のような範囲で表す。最上段より多い場合は上限が無い。 */
-export function formatCreditBand(gauge: CreditGauge): { floor: string; ceiling: string | null } {
-  return {
-    floor: gauge.band.floor.toLocaleString(),
-    ceiling: gauge.band.ceiling?.toLocaleString() ?? null,
-  }
 }
 
 function formatCreditNumber(n: number): string {

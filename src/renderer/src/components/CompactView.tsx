@@ -4,7 +4,7 @@ import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { calcPacePct } from '../paceUtil'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
-import { calcCreditGauge, creditThresholdsOf, formatCreditBalance, formatGaugePct, hasCodexCredits } from '../codexCredits'
+import { calcCreditGauge, creditGaugeMaxOf, formatCreditBalance, formatGaugePct, hasCodexCredits } from '../codexCredits'
 
 interface Props {
   usage: UsageData | null
@@ -395,8 +395,8 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccP
                 <BetaBar label={`Cdx ${windowLabel(d?.secondaryWindowMinutes ?? null)}`} pct={pct7} barColor={color7} reset={reset7} hasData={d != null} pacePct={pace7} />
               )}
               {(settings.tray.showCodexCredits ?? true) && hasCodexCredits(d) && (() => {
-                // 残高には分母がないので、残高が入る段の上限を仮の分母にして塗る。
-                const gauge = calcCreditGauge(d, creditThresholdsOf(settings))
+                // 残高には分母がないので、設定した目安上限を仮の分母にして「どれだけ減ったか」を塗る。
+                const gauge = calcCreditGauge(d, creditGaugeMaxOf(settings))
                 return (
                   <div style={{
                     position: 'relative',

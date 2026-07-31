@@ -5,7 +5,7 @@ import { HistoryChart } from './HistoryChart'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
-import { calcCreditGauge, creditThresholdsOf, formatCreditBalance, formatCreditBand, hasCodexCredits, CreditThresholds } from '../codexCredits'
+import { calcCreditGauge, creditGaugeMaxOf, formatCreditBalance, hasCodexCredits } from '../codexCredits'
 import { useLang } from '../LangContext'
 
 const HOUR = 60 * 60 * 1000
@@ -174,7 +174,7 @@ export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, c
           {(beta.codex?.secondaryWindowMinutes != null || beta.codex?.fiveHourUtilization == null) && (
             <BetaUsageCard label={beta.codex?.fiveHourUtilization != null ? `OpenAI Codex (${formatCodexWindow(beta.codex.secondaryWindowMinutes)})` : 'OpenAI Codex'} data={beta.codex} color="#10a37f" unit={beta.codex?.unit ?? '%'} experimental={false} />
           )}
-          {hasCodexCredits(beta.codex) && <CodexCreditsCard codex={beta.codex} thresholds={creditThresholdsOf(settings)} />}
+          {hasCodexCredits(beta.codex) && <CodexCreditsCard codex={beta.codex} gaugeMax={creditGaugeMaxOf(settings)} />}
         </div>
       )}
 
@@ -294,11 +294,10 @@ function ExtraUsageCard({ extra }: { extra: ExtraUsage }) {
  * Claude の Extra Usage カードと同じ見た目に揃えているが、Codex 側は
  * 「使った量 / 上限」ではなく残高しか返さないため、割合バーは出さない。
  */
-function CodexCreditsCard({ codex, thresholds }: { codex: CodexUsageData; thresholds: CreditThresholds }) {
+function CodexCreditsCard({ codex, gaugeMax }: { codex: CodexUsageData; gaugeMax: number }) {
   const t = useT()
   const th = useTheme()
-  const gauge = calcCreditGauge(codex, thresholds)
-  const band = formatCreditBand(gauge)
+  const gauge = calcCreditGauge(codex, gaugeMax)
 
   return (
     <div style={{
@@ -321,9 +320,7 @@ function CodexCreditsCard({ codex, thresholds }: { codex: CodexUsageData; thresh
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
         <span style={{ color: th.textMuted }}>
-          {band.ceiling != null
-            ? t('creditsBand', band.floor, band.ceiling)
-            : t('creditsBandTop', band.floor)}
+          {t('creditsGaugeMax', gauge.gaugeMax.toLocaleString())}
         </span>
         <span style={{ color: th.textMuted }}>{t('creditsRemaining')}</span>
       </div>

@@ -10,7 +10,7 @@ function formatCodexWindow(minutes: number | null): string {
 }
 import { calcPacePct } from '../paceUtil'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
-import { calcCreditGauge, creditThresholdsOf, formatCreditBalance, hasCodexCredits } from '../codexCredits'
+import { calcCreditGauge, creditGaugeMaxOf, formatCreditBalance, hasCodexCredits } from '../codexCredits'
 
 interface Props {
   usage: UsageData | null
@@ -148,9 +148,9 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
       })
     }
     if ((settings.tray.showCodexCredits ?? true) && hasCodexCredits(d)) {
-      // 残高には分母がないので、残高が入る段の上限を仮の分母にして塗る。
+      // 残高には分母がないので、設定した目安上限を仮の分母にして「どれだけ減ったか」を塗る。
       // 幅が狭いので、割合ではなく残高そのものを数値として出す。
-      const gauge = calcCreditGauge(d, creditThresholdsOf(settings))
+      const gauge = calcCreditGauge(d, creditGaugeMaxOf(settings))
       barDefs.push({
         key: 'codex-credits',
         label: 'CxEX',

@@ -54,10 +54,10 @@ export interface Settings {
   codex?: {
     enabled: boolean
     /**
-     * 追加クレジット残高バーの目安上限（降順）。Codex は残高しか返さず分母が無いので、
-     * 残高が入る段の上限を仮の分母にしてバーを塗る。下の段ほど危機感のある色になる。
+     * 追加クレジットバーの目安上限。Codex は残高しか返さず分母が無いので、
+     * この値を仮の分母にして「そこからどれだけ減ったか」を塗る。
      */
-    creditThresholds?: { high: number; mid: number; low: number }
+    creditGaugeMax?: number
   }
   /** cc-pace-meter: 5h枠の推定上限のキャリブレーション結果（直近の信頼できる値を永続化） */
   ccPaceCalibration?: {
@@ -71,8 +71,8 @@ export interface Settings {
   }
 }
 
-/** 追加クレジットの目安上限の既定値（降順） */
-export const DEFAULT_CREDIT_THRESHOLDS = { high: 1000, mid: 500, low: 100 }
+/** 追加クレジットの目安上限の既定値 */
+export const DEFAULT_CREDIT_GAUGE_MAX = 1000
 
 const defaultSettings: Settings = {
   token: '',
@@ -111,7 +111,7 @@ const defaultSettings: Settings = {
     workDayEnd: 22,
     excludeWeekends: true,
   },
-  codex: { enabled: false, creditThresholds: { ...DEFAULT_CREDIT_THRESHOLDS } },
+  codex: { enabled: false, creditGaugeMax: DEFAULT_CREDIT_GAUGE_MAX },
 }
 
 function settingsPath(): string {
