@@ -5,7 +5,7 @@ import { HistoryChart } from './HistoryChart'
 import { useT } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
-import { CODEX_CREDITS_COLOR, formatCreditBalance, hasCodexCredits } from '../codexCredits'
+import { calcCreditGauge, creditThresholdsOf, formatCreditBalance, hasCodexCredits, CreditThresholds } from '../codexCredits'
 import { useLang } from '../LangContext'
 
 const HOUR = 60 * 60 * 1000
@@ -174,7 +174,7 @@ export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, c
           {(beta.codex?.secondaryWindowMinutes != null || beta.codex?.fiveHourUtilization == null) && (
             <BetaUsageCard label={beta.codex?.fiveHourUtilization != null ? `OpenAI Codex (${formatCodexWindow(beta.codex.secondaryWindowMinutes)})` : 'OpenAI Codex'} data={beta.codex} color="#10a37f" unit={beta.codex?.unit ?? '%'} experimental={false} />
           )}
-          {hasCodexCredits(beta.codex) && <CodexCreditsCard codex={beta.codex} />}
+          {hasCodexCredits(beta.codex) && <CodexCreditsCard codex={beta.codex} thresholds={creditThresholdsOf(settings)} />}
         </div>
       )}
 
@@ -294,9 +294,10 @@ function ExtraUsageCard({ extra }: { extra: ExtraUsage }) {
  * Claude の Extra Usage カードと同じ見た目に揃えているが、Codex 側は
  * 「使った量 / 上限」ではなく残高しか返さないため、割合バーは出さない。
  */
-function CodexCreditsCard({ codex }: { codex: CodexUsageData }) {
+function CodexCreditsCard({ codex, thresholds }: { codex: CodexUsageData; thresholds: CreditThresholds }) {
   const t = useT()
   const th = useTheme()
+  const gauge = calcCreditGauge(codex, thresholds)
 
   return (
     <div style={{
@@ -308,12 +309,21 @@ function CodexCreditsCard({ codex }: { codex: CodexUsageData }) {
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: th.textSub }}>{t('labelCodexCredits')}</span>
-        <span style={{ fontSize: 16, fontWeight: 700, color: CODEX_CREDITS_COLOR }}>
+        <span style={{ fontSize: 16, fontWeight: 700, color: gauge.color }}>
           {formatCreditBalance(codex, { unlimitedLabel: t('creditsUnlimited') })}
         </span>
       </div>
+      <div style={{
+        background: th.bgBar, borderRadius: 3, height: 5, marginBottom: 6, overflow: 'hidden'
+      }}>
+        <div style={{ width: `${gauge.pct}%`, height: '100%', background: gauge.color, borderRadius: 3, transition: 'width 0.4s ease, background 0.4s ease' }} />
+      </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-        <span style={{ color: th.textMuted }}>{t('creditsUnit')}</span>
+        <span style={{ color: th.textMuted }}>
+          {gauge.gaugeMax != null
+            ? t('creditsGaugeMax', gauge.gaugeMax.toLocaleString())
+            : t('creditsGaugeAbove', thresholds.high.toLocaleString())}
+        </span>
         <span style={{ color: th.textMuted }}>{t('creditsRemaining')}</span>
       </div>
       <div style={{ fontSize: 10, color: th.textDesc, marginTop: 3 }}>{t('descCodexCredits')}</div>

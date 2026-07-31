@@ -51,7 +51,14 @@ export interface Settings {
   betaProviders?: {
     copilot?: { enabled: boolean }
   }
-  codex?: { enabled: boolean }
+  codex?: {
+    enabled: boolean
+    /**
+     * 追加クレジット残高バーの目安上限（降順）。Codex は残高しか返さず分母が無いので、
+     * 残高が入る段の上限を仮の分母にしてバーを塗る。下の段ほど危機感のある色になる。
+     */
+    creditThresholds?: { high: number; mid: number; low: number }
+  }
   /** cc-pace-meter: 5h枠の推定上限のキャリブレーション結果（直近の信頼できる値を永続化） */
   ccPaceCalibration?: {
     estimatedLimitTokens: number
@@ -63,6 +70,9 @@ export interface Settings {
     updatedAt: string
   }
 }
+
+/** 追加クレジットの目安上限の既定値（降順） */
+export const DEFAULT_CREDIT_THRESHOLDS = { high: 1000, mid: 500, low: 100 }
 
 const defaultSettings: Settings = {
   token: '',
@@ -101,7 +111,7 @@ const defaultSettings: Settings = {
     workDayEnd: 22,
     excludeWeekends: true,
   },
-  codex: { enabled: false },
+  codex: { enabled: false, creditThresholds: { ...DEFAULT_CREDIT_THRESHOLDS } },
 }
 
 function settingsPath(): string {
@@ -122,6 +132,7 @@ export function loadSettings(): Settings {
       window: { ...defaultSettings.window, ...(saved.window ?? {}) },
       alerts: { ...defaultSettings.alerts, ...(saved.alerts ?? {}) },
       pace:   { ...defaultSettings.pace,   ...(saved.pace   ?? {}) },
+      codex:  { ...defaultSettings.codex,  ...(saved.codex  ?? {}) },
     }
     // 旧フォーマットからの移行
     if (!saved.tray?.showFields) {
@@ -138,7 +149,7 @@ export function loadSettings(): Settings {
       }
     }
     // v1.0: Codex はβプロバイダーから正式プロバイダー設定へ移行する。
-    if (!saved.codex && saved.betaProviders?.codex) merged.codex = saved.betaProviders.codex
+    if (!saved.codex && saved.betaProviders?.codex) merged.codex = { ...merged.codex, ...saved.betaProviders.codex }
     return merged
   } catch {
     return { ...defaultSettings }

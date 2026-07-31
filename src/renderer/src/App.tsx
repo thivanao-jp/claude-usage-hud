@@ -4,6 +4,7 @@ import { CompactView } from './components/CompactView'
 import { UltraCompactView } from './components/UltraCompactView'
 import { SettingsView } from './components/SettingsView'
 import { UsageData, ProfileData, Settings, ViewMode, BetaProvidersData, CcPaceData } from './types'
+import { DEFAULT_CREDIT_THRESHOLDS } from './codexCredits'
 import { LangContext, useT } from './LangContext'
 import { ThemeContext } from './ThemeContext'
 import { resolveLang } from './i18n'
@@ -19,7 +20,7 @@ const defaultSettings: Settings = {
   window: { opacity: 90, alwaysOnTop: true },
   alerts: {},
   pace: { workHoursOnly: false, workDayStart: 5, workDayEnd: 22, excludeWeekends: true },
-  codex: { enabled: false },
+  codex: { enabled: false, creditThresholds: { ...DEFAULT_CREDIT_THRESHOLDS } },
 }
 
 function useResolvedTheme(themeSetting: ThemeSetting): ThemeTokens {

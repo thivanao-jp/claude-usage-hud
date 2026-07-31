@@ -90,7 +90,14 @@ export interface Settings {
   betaProviders?: {
     copilot?: { enabled: boolean }
   }
-  codex?: { enabled: boolean }
+  codex?: {
+    enabled: boolean
+    /**
+     * 追加クレジット残高バーの目安上限（降順）。Codex は残高しか返さず分母が無いので、
+     * 残高が入る段の上限を仮の分母にしてバーを塗る。下の段ほど危機感のある色になる。
+     */
+    creditThresholds?: { high: number; mid: number; low: number }
+  }
 }
 
 // ---- Beta Providers ----

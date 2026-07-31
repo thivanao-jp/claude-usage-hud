@@ -4,6 +4,7 @@ import { useT } from '../LangContext'
 import { useLang } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
+import { DEFAULT_CREDIT_THRESHOLDS } from '../codexCredits'
 
 type ProviderStatus = 'logged-in' | 'logged-out' | 'unknown'
 
@@ -31,7 +32,7 @@ const defaultSettings: Settings = {
   window: { opacity: 90, alwaysOnTop: true },
   alerts: {},
   pace: { workHoursOnly: false, workDayStart: 5, workDayEnd: 22, excludeWeekends: true },
-  codex: { enabled: false },
+  codex: { enabled: false, creditThresholds: { ...DEFAULT_CREDIT_THRESHOLDS } },
 }
 
 interface Props {
@@ -71,6 +72,10 @@ export function SettingsView({ onSettingsChange }: Props) {
   }
 
   const upd = (fn: (prev: Settings) => Settings) => setS(fn)
+
+  // 保存値をそのまま出す。順序や範囲の正規化は表示側の creditThresholdsOf() が行うので、
+  // 編集の途中で入力欄が並び替わらない。
+  const creditThresholds = { ...DEFAULT_CREDIT_THRESHOLDS, ...(s.codex?.creditThresholds ?? {}) }
 
   const inputStyle: React.CSSProperties = {
     background: th.bgInput,
@@ -132,7 +137,7 @@ export function SettingsView({ onSettingsChange }: Props) {
         <div style={{ borderTop: `1px solid ${th.borderSection}`, marginTop: 12, paddingTop: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, marginBottom: 6 }}>OpenAI Codex</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <CheckRow label={t('betaCodexLabel')} checked={s.codex?.enabled ?? false} onChange={v => upd(p => ({ ...p, codex: { enabled: v } }))} th={th} />
+            <CheckRow label={t('betaCodexLabel')} checked={s.codex?.enabled ?? false} onChange={v => upd(p => ({ ...p, codex: { ...p.codex, enabled: v } }))} th={th} />
             <StatusDot status={codexStatus} t={t} />
             <button onClick={() => window.api.showCodexLoginWindow()} style={{ ...secondaryBtn, marginLeft: 'auto', fontSize: 11 }}>{t('betaLoginBtn')}</button>
           </div>
@@ -221,6 +226,35 @@ export function SettingsView({ onSettingsChange }: Props) {
           <CheckRow label={t('codexSecondary')} checked={s.tray.showCodexSecondary ?? true} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showCodexSecondary: v } }))} th={th} />
           <CheckRow label={t('codexCredits')} checked={s.tray.showCodexCredits ?? true} onChange={v => upd(p => ({ ...p, tray: { ...p.tray, showCodexCredits: v } }))} th={th} />
         </div>
+        <Label th={th}>{t('codexCreditGauge')}</Label>
+        {/* ラベルが折り返しても入力欄の高さが揃うように下端で揃える */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          {(['high', 'mid', 'low'] as const).map(band => (
+            <div key={band} style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: th.textFaint2, marginBottom: 4 }}>
+                {t(band === 'high' ? 'codexCreditHigh' : band === 'mid' ? 'codexCreditMid' : 'codexCreditLow')}
+              </div>
+              <input
+                type="number"
+                min={1}
+                value={creditThresholds[band] || ''}
+                onChange={e => {
+                  const v = e.target.value === '' ? 0 : Number(e.target.value)
+                  upd(p => ({
+                    ...p,
+                    codex: {
+                      ...p.codex,
+                      enabled: p.codex?.enabled ?? false,
+                      creditThresholds: { ...creditThresholds, [band]: v },
+                    },
+                  }))
+                }}
+                style={{ ...inputStyle, width: '100%' }}
+              />
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 11, color: th.textFaint2, marginTop: 6 }}>{t('codexCreditGaugeHint')}</div>
       </Section>
 
       {/* Update interval */}
