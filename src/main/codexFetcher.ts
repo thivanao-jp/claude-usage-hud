@@ -1,6 +1,7 @@
-import { shell } from 'electron'
+import { app, shell } from 'electron'
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { createInterface } from 'readline'
+import type { CodexPaceData } from './codexPaceMeter'
 
 export interface CodexUsageData {
   used: number
@@ -17,6 +18,9 @@ export interface CodexUsageData {
   creditBalance: number | null
   creditsUnlimited: boolean
   hasCredits: boolean
+  pace: CodexPaceData | null
+  /** App Serverが返す獲得済みrate-limit resetの残数。未提供時はnull。 */
+  rateLimitResetCreditsAvailable: number | null
 }
 
 export type CodexLoginStatus = 'logged-in' | 'logged-out' | 'unknown'
@@ -94,7 +98,7 @@ export class CodexFetcher {
       rl.on('line', (line) => this.handleMessage(line))
 
       this.requestRaw('initialize', {
-        clientInfo: { name: 'claude_usage_hud', title: 'Claude Usage HUD', version: '1.0.1' },
+        clientInfo: { name: 'claude_usage_hud', title: 'Claude Usage HUD', version: app.getVersion() },
       }).then(() => {
         initialized = true
         this.send({ method: 'initialized', params: {} })
@@ -193,6 +197,8 @@ export class CodexFetcher {
     const base = secondary ?? primary
     if (!base) return null
     const credits = this.parseCredits(bucket['credits'])
+    const resetCredits = result['rateLimitResetCredits'] as Record<string, unknown> | null | undefined
+    const availableCount = Number(resetCredits?.['availableCount'])
     return {
       used: Math.round(base.utilization), limit: 100, utilization: base.utilization,
       resetDate: base.resetDate, unit: this.windowLabel(base.minutes),
@@ -202,6 +208,8 @@ export class CodexFetcher {
       secondaryWindowMinutes: secondary?.minutes ?? null,
       planType,
       ...credits,
+      pace: null,
+      rateLimitResetCreditsAvailable: Number.isFinite(availableCount) && availableCount >= 0 ? availableCount : null,
     }
   }
 

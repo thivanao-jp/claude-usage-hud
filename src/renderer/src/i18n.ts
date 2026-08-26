@@ -29,11 +29,13 @@ const en = {
   remaining:      'Remaining',
 
   // ---- cc-pace-meter (car metaphor) ----
-  ccPaceBurnRate: 'Fuel: {0} tok/min',
-  ccPaceCostRate: '(${0}/min)',
+  ccPaceBurnRate: 'CC fuel: ~${0}/min',
   ccPaceLimitEst: '(tank ~{0})',
   ccPaceLimitEstUsd: '(tank ~${0})',
   ccPaceRange: 'Range: ~{0}',
+  codexPaceBurnRate: 'Codex fuel: {0}%/min',
+  codexPaceRange: 'Range: ~{0}',
+  codexResetCredits: '{0} earned limit reset(s) available',
 
   // カードラベル
   label5h:        '5-Hour',
@@ -176,11 +178,13 @@ const ja = {
   resetLabel:     'リセット:',
   remaining:      '残り',
 
-  ccPaceBurnRate: '燃費: {0} tok/分',
-  ccPaceCostRate: '(${0}/分)',
+  ccPaceBurnRate: 'CC燃費: 約${0}/分',
   ccPaceLimitEst: '(推定上限 ~{0})',
   ccPaceLimitEstUsd: '(推定上限 ~${0})',
   ccPaceRange: '航続: 約{0}',
+  codexPaceBurnRate: 'Codex燃費: {0}%/分',
+  codexPaceRange: '航続: 約{0}',
+  codexResetCredits: '獲得済みリミットリセット: {0}回',
 
   label5h:        '5時間',
   label7d:        '7日間 (claude.ai)',
@@ -293,9 +297,9 @@ const ja = {
   betaDataUnavailable:     'データ取得不可 — APIが変更された可能性があります',
   betaMonthlyUsed:         '{0} / {1} {2} 使用',
   betaResetLabel:          'リセット:',
-} satisfies typeof en
+} satisfies Record<keyof typeof en, string>
 
-const dict: Record<Lang, typeof en> = { en, ja }
+const dict: Record<Lang, Record<keyof typeof en, string>> = { en, ja }
 
 export type TranslationKey = keyof typeof en
 

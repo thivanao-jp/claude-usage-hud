@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { UsageData, ProfileData, ExtraUsage, Settings, UsageEntry, BetaProvidersData, CopilotUsageData, CodexUsageData, CcPaceData } from '../types'
+import { UsageData, ProfileData, ExtraUsage, Settings, UsageEntry, BetaProvidersData, CopilotUsageData, CodexUsageData, CcPaceData, CodexPaceData } from '../types'
 import { UsageCard } from './UsageCard'
 import { HistoryChart } from './HistoryChart'
 import { useT } from '../LangContext'
@@ -9,7 +9,6 @@ import { calcCreditGauge, creditGaugeMaxOf, formatCreditBalance, hasCodexCredits
 import { useLang } from '../LangContext'
 
 const HOUR = 60 * 60 * 1000
-const DAY  = 24 * HOUR
 
 function getWeeklyEntry(usage: UsageData, key: string): UsageEntry | null {
   return (usage as unknown as Record<string, UsageEntry | null>)[key] ?? null
@@ -169,12 +168,18 @@ export function DetailView({ usage, profile, settings, lastSuccessAt, isStale, c
               label={`OpenAI Codex (${formatCodexWindow(beta.codex.primaryWindowMinutes)})`}
               data={{ ...beta.codex, used: Math.round(beta.codex.fiveHourUtilization), limit: 100, utilization: beta.codex.fiveHourUtilization, resetDate: beta.codex.fiveHourResetDate, unit: formatCodexWindow(beta.codex.primaryWindowMinutes), fiveHourUtilization: null, fiveHourResetDate: null, primaryWindowMinutes: null, secondaryWindowMinutes: null }}
               color="#10a37f" unit={formatCodexWindow(beta.codex.primaryWindowMinutes)} experimental={false}
+              pace={beta.codex.pace}
             />
           )}
           {(beta.codex?.secondaryWindowMinutes != null || beta.codex?.fiveHourUtilization == null) && (
             <BetaUsageCard label={beta.codex?.fiveHourUtilization != null ? `OpenAI Codex (${formatCodexWindow(beta.codex.secondaryWindowMinutes)})` : 'OpenAI Codex'} data={beta.codex} color="#10a37f" unit={beta.codex?.unit ?? '%'} experimental={false} />
           )}
           {hasCodexCredits(beta.codex) && <CodexCreditsCard codex={beta.codex} gaugeMax={creditGaugeMaxOf(settings)} />}
+          {beta.codex?.rateLimitResetCreditsAvailable != null && beta.codex.rateLimitResetCreditsAvailable > 0 && (
+            <div style={{ fontSize: 10, color: th.textMuted, margin: '-1px 2px 6px' }}>
+              ↻ {t('codexResetCredits', beta.codex.rateLimitResetCreditsAvailable)}
+            </div>
+          )}
         </div>
       )}
 
@@ -254,10 +259,17 @@ function formatCodexWindow(minutes: number | null): string {
   return `${minutes}m`
 }
 
+function formatPaceMinutes(minutes: number): string {
+  const rounded = Math.max(0, Math.round(minutes))
+  const hours = Math.floor(rounded / 60)
+  const mins = rounded % 60
+  return hours > 0 ? (mins > 0 ? `${hours}h${mins}m` : `${hours}h`) : `${mins}m`
+}
+
 function ExtraUsageCard({ extra }: { extra: ExtraUsage }) {
   const t = useT()
   const th = useTheme()
-  const pct = Math.min(Math.round(extra.utilization), 100)
+  const pct = Math.min(Math.round(extra.utilization ?? 0), 100)
   const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : '#a78bfa'
 
   return (
@@ -329,7 +341,7 @@ function CodexCreditsCard({ codex, gaugeMax }: { codex: CodexUsageData; gaugeMax
   )
 }
 
-function BetaUsageCard({ label, data, color, unit, experimental = true }: { label: string; data: CopilotUsageData | CodexUsageData | null; color: string; unit: string; experimental?: boolean }) {
+function BetaUsageCard({ label, data, color, unit, experimental = true, pace }: { label: string; data: CopilotUsageData | CodexUsageData | null; color: string; unit: string; experimental?: boolean; pace?: CodexPaceData | null }) {
   const t = useT()
   const th = useTheme()
 
@@ -370,6 +382,16 @@ function BetaUsageCard({ label, data, color, unit, experimental = true }: { labe
           </span>
         )}
       </div>
+      {pace?.available && pace.burnRatePercentPerMin != null && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginTop: 4, color: th.textMuted }}>
+          <span>🔥 {t('codexPaceBurnRate', pace.burnRatePercentPerMin.toFixed(2))}</span>
+          {pace.minutesToLimit != null && (
+            <span style={{ color: pace.minutesToReset != null && pace.minutesToLimit < pace.minutesToReset ? '#e05a2b' : th.textMuted }}>
+              {t('codexPaceRange', formatPaceMinutes(pace.minutesToLimit))}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 }

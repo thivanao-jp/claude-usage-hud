@@ -47,6 +47,7 @@ Always-on-top floating window showing usage bars at a glance.
 - **Opus** — 7-day Opus window
 - **EX** — Extra usage (monthly add-on credits, when enabled)
 - **Codex** — Current Codex rate-limit windows from the official Codex CLI (when enabled)
+- **Fuel / range** — Claude Code shows approximate `$/min` using model-specific pricing; Codex shows quota `%/min` and estimated time to its primary limit
 - **β** — Experimental provider bar (GitHub Copilot — when enabled)
 
 ### Detail View
@@ -148,6 +149,8 @@ GET http://127.0.0.1:49485/usage
 
 ```json
 {
+  "schema_version": 2,
+  "generated_at": "2026-08-26T04:51:40.000Z",
   "five_hour": {
     "utilization": 43,
     "resets_at": "2026-04-17T08:00:00.000Z"
@@ -157,7 +160,13 @@ GET http://127.0.0.1:49485/usage
     "resets_at": "2026-04-21T00:00:00.000Z"
   },
   "extra_usage": null,
-  "last_updated": "2026-04-17T04:51:38.831Z"
+  "last_updated": "2026-08-26T04:51:38.831Z",
+  "providers": {
+    "claude": { "pace": { "provider": "claude", "source": "claude-code-jsonl" } },
+    "codex": { "pace": { "provider": "codex", "source": "codex-rate-limit-delta" } }
+  },
+  "claude_code_pace": { "provider": "claude", "source": "claude-code-jsonl" },
+  "cc_pace": { "provider": "claude", "source": "claude-code-jsonl" }
 }
 ```
 
@@ -167,6 +176,11 @@ GET http://127.0.0.1:49485/usage
 | `seven_day` | 7-day rolling window |
 | `extra_usage` | Monthly add-on credits, or `null` if not enabled |
 | `last_updated` | Timestamp of the last successful data fetch |
+| `providers` | Provider-scoped v2 representation. Claude and Codex pace values cannot be confused by field name. |
+| `claude_code_pace` | Claude Code JSONL-based fuel/range. Includes pricing catalog metadata and any fallback/unpriced model IDs. |
+| `cc_pace` | Backward-compatible alias of `claude_code_pace`; it is never a Codex estimate. |
+
+The bundled Claude pricing catalog is checked against the repository copy at startup and cached after strict data validation. Pricing-only updates therefore do not require an app release. Advanced users can place a schema-compatible `modelPricing.override.json` in the app user-data directory; the override is applied last.
 
 Returns the last successfully fetched values. Returns `null` for any window that has not been fetched yet.
 

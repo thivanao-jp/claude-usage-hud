@@ -2,6 +2,8 @@ import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
 import { UsageData } from './claudeApi'
+import type { CodexUsageData } from './codexFetcher'
+import type { CodexPacePoint } from './codexPaceMeter'
 
 let _db: Database.Database | null = null
 
@@ -22,6 +24,17 @@ function db(): Database.Database {
       seven_day_omelette   REAL
     );
     CREATE INDEX IF NOT EXISTS idx_recorded_at ON usage_history(recorded_at);
+    CREATE TABLE IF NOT EXISTS provider_usage_history (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      provider       TEXT NOT NULL,
+      bucket_id      TEXT NOT NULL,
+      recorded_at_ms INTEGER NOT NULL,
+      utilization    REAL NOT NULL,
+      resets_at      TEXT,
+      window_minutes REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_provider_usage_history
+      ON provider_usage_history(provider, bucket_id, recorded_at_ms);
   `)
   // 既存DBへのカラム追加（なければ追加）
   const cols = (_db.prepare("PRAGMA table_info(usage_history)").all() as { name: string }[]).map(c => c.name)
@@ -84,6 +97,32 @@ export function saveUsageHistory(usage: UsageData): void {
       usage.amber_ladder?.utilization ?? null,
       usage.extra_usage?.utilization ?? null
     )
+}
+
+/** Codexのquota増分から燃費を計算できるよう、プロバイダー別の小さな時系列を保存する。 */
+export function saveCodexUsageHistory(usage: CodexUsageData, recordedAt = Date.now()): void {
+  const insert = db().prepare(
+    `INSERT INTO provider_usage_history
+      (provider, bucket_id, recorded_at_ms, utilization, resets_at, window_minutes)
+     VALUES ('codex', ?, ?, ?, ?, ?)`
+  )
+  const transaction = db().transaction(() => {
+    if (usage.fiveHourUtilization != null) {
+      insert.run('primary', recordedAt, usage.fiveHourUtilization, usage.fiveHourResetDate, usage.primaryWindowMinutes)
+    }
+    insert.run('secondary', recordedAt, usage.utilization, usage.resetDate, usage.secondaryWindowMinutes)
+    db().prepare(`DELETE FROM provider_usage_history WHERE recorded_at_ms < ?`).run(recordedAt - 14 * 24 * 60 * 60 * 1000)
+  })
+  transaction()
+}
+
+export function getCodexPaceHistory(sinceMs: number): CodexPacePoint[] {
+  return db().prepare(
+    `SELECT recorded_at_ms AS recordedAt, utilization, resets_at AS resetsAt
+       FROM provider_usage_history
+      WHERE provider = 'codex' AND bucket_id = 'primary' AND recorded_at_ms >= ?
+      ORDER BY recorded_at_ms ASC`
+  ).all(sinceMs) as CodexPacePoint[]
 }
 
 /**

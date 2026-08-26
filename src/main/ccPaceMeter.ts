@@ -1,7 +1,7 @@
 import { homedir } from 'os'
 import { join } from 'path'
 import { readdir, stat, open } from 'fs/promises'
-import { calcPaceCostUsd } from './modelPricing'
+import { calcPaceCost, getPricingCatalogStatus, type PricingCatalogStatus } from './modelPricing'
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
 const PROJECTS_DIR = join(CLAUDE_DIR, 'projects')
@@ -15,7 +15,7 @@ const MAX_INITIAL_READ = 2 * 1024 * 1024 // 新規追跡ファイルは末尾2MB
 export const BOOTSTRAP_LOOKBACK_MS = 24 * 60 * 60 * 1000
 const BOOTSTRAP_MAX_INITIAL_READ = 16 * 1024 * 1024
 const BOOTSTRAP_MAX_BLOCKS = 4 // 過去何ブロック分まで遡ってサンプル化するか
-const MAX_RECORD_GAP_MS = 60 * 60 * 1000 // usage_history のレコードがブロック境界からこれ以上離れていたら使わない
+const MAX_RECORD_GAP_MS = 15 * 60 * 1000 // 境界から遠い古いutilizationはトークンとの鮮度差が大きいため使わない
 
 // ディレクトリ全体の再走査（readdir）はこの間隔でのみ行い、それ以外は前回のファイル一覧を再利用する
 const DIR_RESCAN_INTERVAL_MS = 5 * 60 * 1000
@@ -23,6 +23,8 @@ const DIR_RESCAN_INTERVAL_MS = 5 * 60 * 1000
 const DORMANT_THRESHOLD_MS = LOOKBACK_MS
 
 export interface CcPaceData {
+  provider: 'claude'
+  source: 'claude-code-jsonl'
   available: boolean
   paceTokensInBlock: number | null
   burnRatePerMin: number | null
@@ -40,6 +42,12 @@ export interface CcPaceData {
   calibratedNow: boolean
   /** キャリブレーションに使われたブロック数（EMAのウォームアップに使用） */
   sampleCount: number
+  /** 現在使っている価格カタログ。価格表だけを更新した場合も追跡できる。 */
+  pricingCatalog: PricingCatalogStatus
+  /** 同系列の既知価格で概算した未知バージョン。 */
+  pricingFallbackModels: string[]
+  /** 系列も判別できず、コストに含められなかったモデル。 */
+  unpricedModels: string[]
 }
 
 export interface HistoryPoint {
@@ -54,7 +62,7 @@ export interface BootstrapResult {
 }
 
 const MIN_UTIL_FOR_CALIBRATION = 5 // % 未満は逆算値が不安定なので信頼しない
-// EMAの追従速度: utilization% が高いほど1回あたりの寄与を大きくする（5%→約0.05、50%以上→上限0.3）
+export const MAX_UTIL_FOR_CALIBRATION = 95 // 飽和域は飛行中リクエストのオーバーシュートを含むため除外
 const EMA_ALPHA_MIN = 0.05
 const EMA_ALPHA_MAX = 0.3
 
@@ -62,6 +70,8 @@ interface UsageEvent {
   timestamp: number
   paceTokens: number
   paceCostUsd: number
+  model: string | null
+  pricingMatch: 'exact-prefix' | 'family-fallback' | 'unpriced'
 }
 
 interface FileState {
@@ -123,10 +133,13 @@ function parseLine(line: string): void {
   const cacheCreate = Number(usage['cache_creation_input_tokens'] ?? 0)
   const model = msg?.['model'] as string | undefined
 
+  const cost = calcPaceCost(usage, model)
   events.push({
     timestamp: ts,
     paceTokens: inputTokens + outputTokens + cacheCreate,
-    paceCostUsd: calcPaceCostUsd(usage, model),
+    paceCostUsd: cost.usd,
+    model: model ?? null,
+    pricingMatch: cost.resolution.match,
   })
 }
 
@@ -233,6 +246,35 @@ function blendEma(fallback: number | null, current: number, alpha: number): numb
   return fallback != null ? fallback * (1 - alpha) + current * alpha : current
 }
 
+/** 低使用率の丸め誤差と95%手前のオーバーシュートをともに弱く扱う。 */
+export function calibrationAlpha(utilization: number): number {
+  if (utilization <= 60) {
+    return Math.min(EMA_ALPHA_MAX, Math.max(EMA_ALPHA_MIN, utilization / 100))
+  }
+  const highUtilWeight = (MAX_UTIL_FOR_CALIBRATION - utilization) / (MAX_UTIL_FOR_CALIBRATION - 60)
+  return Math.min(EMA_ALPHA_MAX, Math.max(EMA_ALPHA_MIN,
+    EMA_ALPHA_MIN + (EMA_ALPHA_MAX - EMA_ALPHA_MIN) * highUtilWeight))
+}
+
+export function estimateLimitFromUtilization(consumed: number, utilization: number): number | null {
+  if (!Number.isFinite(consumed) || consumed <= 0) return null
+  if (!Number.isFinite(utilization)
+    || utilization <= MIN_UTIL_FOR_CALIBRATION
+    || utilization >= MAX_UTIL_FOR_CALIBRATION) return null
+  return (consumed / utilization) * 100
+}
+
+function pricingDiagnostics(sourceEvents: UsageEvent[]): Pick<CcPaceData, 'pricingCatalog' | 'pricingFallbackModels' | 'unpricedModels'> {
+  const unique = (match: UsageEvent['pricingMatch']) => [...new Set(sourceEvents
+    .filter(e => e.pricingMatch === match && e.model)
+    .map(e => e.model as string))].sort()
+  return {
+    pricingCatalog: getPricingCatalogStatus(),
+    pricingFallbackModels: unique('family-fallback'),
+    unpricedModels: unique('unpriced'),
+  }
+}
+
 /**
  * 過去の usage_history（5h枠利用率の定期スナップショット）とJSONLのトークン蓄積を
  * 突き合わせ、過去 BOOTSTRAP_MAX_BLOCKS ブロック分の「推定上限」サンプルを作る。
@@ -266,15 +308,18 @@ export function getBootstrapEstimate(usageHistory: HistoryPoint[], resetsAtIso: 
     if (blockEnd - closest.recordedAt > MAX_RECORD_GAP_MS) continue
 
     const utilization = closest.fiveHour as number
-    if (utilization <= MIN_UTIL_FOR_CALIBRATION) continue
+    if (utilization <= MIN_UTIL_FOR_CALIBRATION || utilization >= MAX_UTIL_FOR_CALIBRATION) continue
 
-    const blockEvents = events.filter(e => e.timestamp >= blockStart && e.timestamp <= blockEnd)
+    // utilization と同じ観測時刻までのイベントだけを分子にし、鮮度差による過大推定を防ぐ。
+    const blockEvents = events.filter(e => e.timestamp >= blockStart && e.timestamp <= closest!.recordedAt)
     const tokens = blockEvents.reduce((sum, e) => sum + e.paceTokens, 0)
     const usd = blockEvents.reduce((sum, e) => sum + e.paceCostUsd, 0)
     if (tokens <= 0) continue
 
-    tokenSamples.push((tokens / utilization) * 100)
-    if (usd > 0) usdSamples.push((usd / utilization) * 100)
+    const tokenEstimate = estimateLimitFromUtilization(tokens, utilization)
+    const usdEstimate = estimateLimitFromUtilization(usd, utilization)
+    if (tokenEstimate != null) tokenSamples.push(tokenEstimate)
+    if (usdEstimate != null) usdSamples.push(usdEstimate)
   }
 
   const avg = (arr: number[]): number | null =>
@@ -295,6 +340,7 @@ export function getBootstrapEstimate(usageHistory: HistoryPoint[], resetsAtIso: 
  * @param fallbackLimitUsd 過去にキャリブレーションした推定コスト上限（$、フォールバック）
  * @param fallbackSampleCount これまでにクロスブロックでブレンドした回数（EMAウォームアップ用）
  * @param fallbackLastResetsAt 前回クロスブロックでブレンドした際の resetsAt（ブロック切り替え検知用）
+ * @param utilizationObservedAt API使用率を観測した時刻。校正の分子もこの時刻までに揃える。
  */
 export function getCcPaceData(
   fiveHourUtilization: number | null,
@@ -302,9 +348,13 @@ export function getCcPaceData(
   fallbackLimitTokens: number | null = null,
   fallbackLimitUsd: number | null = null,
   fallbackSampleCount = 0,
-  fallbackLastResetsAt: string | null = null
+  fallbackLastResetsAt: string | null = null,
+  utilizationObservedAt: number | null = null
 ): CcPaceData {
+  const diagnostics = pricingDiagnostics(events)
   const empty: CcPaceData = {
+    provider: 'claude',
+    source: 'claude-code-jsonl',
     available: events.length > 0,
     paceTokensInBlock: null,
     burnRatePerMin: null,
@@ -315,6 +365,7 @@ export function getCcPaceData(
     estimatedLimitUsd: fallbackLimitUsd,
     calibratedNow: false,
     sampleCount: fallbackSampleCount,
+    ...diagnostics,
   }
   if (events.length === 0) return empty
   if (!resetsAtIso) return empty
@@ -347,9 +398,20 @@ export function getCcPaceData(
   let calibratedNow = false
   let sampleCount = fallbackSampleCount
 
-  if (fiveHourUtilization != null && fiveHourUtilization > MIN_UTIL_FOR_CALIBRATION && paceTokensInBlock > 0) {
-    const currentEstimateTokens = (paceTokensInBlock / fiveHourUtilization) * 100
-    const currentEstimateUsd = paceCostUsdInBlock > 0 ? (paceCostUsdInBlock / fiveHourUtilization) * 100 : null
+  const observedAt = utilizationObservedAt != null && Number.isFinite(utilizationObservedAt)
+    ? Math.min(now, utilizationObservedAt)
+    : now
+  const calibrationEvents = blockEvents.filter(e => e.timestamp <= observedAt)
+  const calibrationTokens = calibrationEvents.reduce((sum, e) => sum + e.paceTokens, 0)
+  const calibrationUsd = calibrationEvents.reduce((sum, e) => sum + e.paceCostUsd, 0)
+
+  if (fiveHourUtilization != null
+    && fiveHourUtilization > MIN_UTIL_FOR_CALIBRATION
+    && fiveHourUtilization < MAX_UTIL_FOR_CALIBRATION
+    && observedAt >= blockStart
+    && calibrationTokens > 0) {
+    const currentEstimateTokens = estimateLimitFromUtilization(calibrationTokens, fiveHourUtilization)!
+    const currentEstimateUsd = estimateLimitFromUtilization(calibrationUsd, fiveHourUtilization)
 
     if (fallbackLimitTokens == null) {
       // 初回（ブートストラップ未実施 or 失敗）: そのまま採用
@@ -358,7 +420,7 @@ export function getCcPaceData(
       sampleCount = 1
     } else {
       const isNewBlock = fallbackLastResetsAt !== resetsAtIso
-      const utilAlpha = Math.min(EMA_ALPHA_MAX, Math.max(EMA_ALPHA_MIN, fiveHourUtilization / 100))
+      const utilAlpha = calibrationAlpha(fiveHourUtilization)
       let alpha: number
       if (isNewBlock) {
         // ブロック跨ぎ: サンプル数に応じたウォームアップ係数（1/(n+1)）と utilization 係数の小さい方を採用
@@ -388,6 +450,8 @@ export function getCcPaceData(
   }
 
   return {
+    provider: 'claude',
+    source: 'claude-code-jsonl',
     available: true,
     paceTokensInBlock,
     burnRatePerMin,
@@ -398,5 +462,6 @@ export function getCcPaceData(
     estimatedLimitUsd,
     calibratedNow,
     sampleCount,
+    ...pricingDiagnostics(blockEvents),
   }
 }

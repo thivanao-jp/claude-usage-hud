@@ -125,6 +125,19 @@ export interface CodexUsageData {
   creditBalance: number | null
   creditsUnlimited: boolean
   hasCredits: boolean
+  pace: CodexPaceData | null
+  rateLimitResetCreditsAvailable: number | null
+}
+
+export interface CodexPaceData {
+  provider: 'codex'
+  source: 'codex-rate-limit-delta'
+  available: boolean
+  burnRatePercentPerMin: number | null
+  minutesToLimit: number | null
+  minutesToReset: number | null
+  sampleWindowMinutes: number | null
+  sampleCount: number
 }
 
 export interface BetaProvidersData {
@@ -135,6 +148,8 @@ export interface BetaProvidersData {
 // ---- cc-pace-meter (ローカルJSONLベースのバーンレート) ----
 
 export interface CcPaceData {
+  provider: 'claude'
+  source: 'claude-code-jsonl'
   available: boolean
   paceTokensInBlock: number | null
   burnRatePerMin: number | null
@@ -145,6 +160,13 @@ export interface CcPaceData {
   estimatedLimitUsd: number | null
   calibratedNow: boolean
   sampleCount: number
+  pricingCatalog: {
+    source: 'bundled' | 'cache' | 'remote' | 'override'
+    updatedAt: string
+    reference: string
+  }
+  pricingFallbackModels: string[]
+  unpricedModels: string[]
 }
 
 export interface HistoryRow {
