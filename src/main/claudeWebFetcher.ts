@@ -390,7 +390,7 @@ function mapUsage(raw: unknown): UsageData | null {
   // extra_usage は構造が異なるので個別にマッピング
   // monthly_limit=0 かつ utilization=null はプランが extra_usage 未設定の状態なので null 扱い
   const extraRaw = r['extra_usage']
-  let extra_usage = null
+  let extra_usage: UsageData['extra_usage'] = null
   if (extraRaw && typeof extraRaw === 'object') {
     const e = extraRaw as Record<string, unknown>
     const monthlyLimit = Number(e['monthly_limit'] ?? 0)

@@ -73,6 +73,11 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
     ccPace?.minutesToReset != null &&
     ccPace.minutesToLimit < ccPace.minutesToReset
   )
+  const codexPaceWarning = !!(
+    beta?.codex?.pace?.minutesToLimit != null &&
+    beta.codex.pace.minutesToReset != null &&
+    beta.codex.pace.minutesToLimit < beta.codex.pace.minutesToReset
+  )
 
   if (settings.tray.show5h) {
     const entry = usageRecord?.['five_hour'] ?? null
@@ -135,6 +140,7 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
         pct: Math.min(Math.round(d.fiveHourUtilization), 100),
         resetAt: d.fiveHourResetDate ?? null,
         periodMs: (d.primaryWindowMinutes ?? 5 * 60) * 60_000,
+        warning: codexPaceWarning,
       })
     }
     if ((settings.tray.showCodexSecondary ?? true) && (d.secondaryWindowMinutes != null || d.fiveHourUtilization == null)) {
@@ -200,7 +206,7 @@ export function UltraCompactView({ usage, settings, beta, isStale, ccPace }: Pro
       userSelect: 'none',
     }}>
       {/* Drag handle */}
-      <div style={{ height: 4, WebkitAppRegion: 'drag' as any }} />
+      <div style={{ height: 4, WebkitAppRegion: 'drag' } as React.CSSProperties} />
 
       {/* Bars */}
       <div style={{ padding: '0 4px 4px' }}>

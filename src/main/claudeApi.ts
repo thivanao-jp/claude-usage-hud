@@ -104,6 +104,8 @@ export interface CodexUsageData {
   creditBalance: number | null
   creditsUnlimited: boolean
   hasCredits: boolean
+  pace: import('./codexPaceMeter').CodexPaceData | null
+  rateLimitResetCreditsAvailable: number | null
 }
 
 export interface BetaProvidersData {

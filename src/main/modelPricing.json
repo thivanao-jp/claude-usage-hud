@@ -1,10 +1,25 @@
 {
   "_meta": {
-    "source": "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json",
-    "fetchedAt": "2026-07-02",
-    "note": "前方一致でモデル名とマッチ。各値は $ per token（sticker価格。Sonnet 5は2026-08-31まで$2/$10のintro価格が別途あるが未反映）。cw1h が無い旧モデルは cw5m * 1.6 を概算値として使用。"
+    "schemaVersion": 1,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "updatedAt": "2026-08-26",
+    "note": "モデルIDは最長の前方一致で照合。各値は標準ルーティングの USD/token。未知バージョンは familyFallbacks の同系列モデルで概算し、API診断にフォールバック使用を明示する。"
+  },
+  "familyFallbacks": {
+    "opus": "claude-opus-5",
+    "sonnet": "claude-sonnet-5",
+    "haiku": "claude-haiku-4-5",
+    "fable": "claude-fable-5",
+    "mythos": "claude-mythos-5"
   },
   "models": {
+    "claude-opus-5": {
+      "in": 5e-06,
+      "out": 2.5e-05,
+      "cw5m": 6.25e-06,
+      "cw1h": 1e-05,
+      "cr": 5e-07
+    },
     "claude-opus-4-1": {
       "in": 1.5e-05,
       "out": 7.5e-05,
@@ -69,11 +84,11 @@
       "cr": 1e-06
     },
     "claude-sonnet-5": {
-      "in": 3e-06,
-      "out": 1.5e-05,
-      "cw5m": 3.75e-06,
-      "cw1h": 6e-06,
-      "cr": 3e-07
+      "in": 2e-06,
+      "out": 1e-05,
+      "cw5m": 2.5e-06,
+      "cw1h": 4e-06,
+      "cr": 2e-07
     },
     "claude-sonnet-4-6": {
       "in": 3e-06,

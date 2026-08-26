@@ -282,7 +282,7 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccP
         {/* Extra usage bar */}
         {showExtraBar && (() => {
           const extra: ExtraUsage | null = usage?.extra_usage ?? null
-          const pct = extra ? Math.min(Math.round(extra.utilization), 100) : 0
+          const pct = extra ? Math.min(Math.round(extra.utilization ?? 0), 100) : 0
           const barColor = pct >= 90 ? '#e05a2b' : pct >= 70 ? '#e0a12b' : '#a78bfa'
           const creditsText = extra
             ? `${extra.used_credits.toLocaleString()}/${extra.monthly_limit.toLocaleString()}cr`
@@ -363,6 +363,10 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccP
           const color7 = pct7 >= 90 ? '#e05a2b' : pct7 >= 70 ? '#e0a12b' : '#10a37f'
           const reset7 = formatReset(d?.resetDate ?? null, t('timeNow'))
           const pace7 = d?.resetDate && d.secondaryWindowMinutes ? calcPacePct(d.resetDate, d.secondaryWindowMinutes * 60_000, settings.pace) : null
+          const codexPace = d?.pace
+          const codexPaceWarning = !!(codexPace?.minutesToLimit != null
+            && codexPace.minutesToReset != null
+            && codexPace.minutesToLimit < codexPace.minutesToReset)
 
           const BetaBar = ({ label, pct, barColor, reset, hasData, pacePct }: {
             label: string; pct: number; barColor: string
@@ -390,7 +394,19 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccP
 
           return (
             <>
-              {(settings.tray.showCodexPrimary ?? true) && <BetaBar label={`Cdx ${windowLabel(d?.primaryWindowMinutes ?? null)}`} pct={pct5} barColor={color5} reset={reset5} hasData={d?.fiveHourUtilization != null} pacePct={pace5} />}
+              {(settings.tray.showCodexPrimary ?? true) && <>
+                <BetaBar label={`Cdx ${windowLabel(d?.primaryWindowMinutes ?? null)}`} pct={pct5} barColor={color5} reset={reset5} hasData={d?.fiveHourUtilization != null} pacePct={pace5} />
+                {codexPace?.available && codexPace.burnRatePercentPerMin != null && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: th.textMuted, margin: '-2px 1px 4px' }}>
+                    <span>🔥 {t('codexPaceBurnRate', codexPace.burnRatePercentPerMin.toFixed(2))}</span>
+                    {codexPace.minutesToLimit != null && (
+                      <span style={{ color: codexPaceWarning ? '#e05a2b' : th.textMuted }}>
+                        {t('codexPaceRange', formatMinutes(codexPace.minutesToLimit))}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </>}
               {(settings.tray.showCodexSecondary ?? true) && (d?.secondaryWindowMinutes != null || d?.fiveHourUtilization == null) && (
                 <BetaBar label={`Cdx ${windowLabel(d?.secondaryWindowMinutes ?? null)}`} pct={pct7} barColor={color7} reset={reset7} hasData={d != null} pacePct={pace7} />
               )}

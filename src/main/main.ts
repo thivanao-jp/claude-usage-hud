@@ -18,13 +18,16 @@ import { autoUpdater } from 'electron-updater'
 import { loadSettings, saveSettings, Settings, ViewMode, UltraPosition } from './settings'
 import { UsageData, ProfileData, UsageEntry, BetaProvidersData } from './claudeApi'
 import { WEEKLY_FIELD_DEFS } from './fieldDefs'
-import { saveUsageHistory, getUsageHistory, debugSeedHistory, debugClearHistory } from './db'
+import { saveUsageHistory, getUsageHistory, debugSeedHistory, debugClearHistory, saveCodexUsageHistory, getCodexPaceHistory } from './db'
 import { getTokenFromCredentials } from './credentials'
 import { ClaudeWebFetcher } from './claudeWebFetcher'
 import { GitHubCopilotFetcher } from './githubCopilotFetcher'
 import { CodexFetcher } from './codexFetcher'
 import { createBarIcon } from './trayIcon'
 import { pollCcUsage, getCcPaceData, getBootstrapEstimate, CcPaceData, HistoryPoint, BOOTSTRAP_LOOKBACK_MS } from './ccPaceMeter'
+import { calculateCodexPace } from './codexPaceMeter'
+import { initializeModelPricing } from './modelPricing'
+import { buildLocalUsagePayload } from './localUsagePayload'
 
 // ---- Screenshot / Debug Mock Mode ----
 // README用スクリーンショット生成のための開発専用モード。パッケージ済みアプリでは絶対に有効化されない。
@@ -82,7 +85,7 @@ let lastUsage: UsageData | null = null
 let lastProfile: ProfileData | null = null
 let lastSuccessAt: Date | null = null
 let lastBeta: BetaProvidersData = { copilot: null, codex: null }
-let lastCcPace: CcPaceData = { available: false, paceTokensInBlock: null, burnRatePerMin: null, burnRateCostPerMin: null, minutesToLimit: null, minutesToReset: null, estimatedLimitTokens: null, estimatedLimitUsd: null, calibratedNow: false, sampleCount: 0 }
+let lastCcPace: CcPaceData = getCcPaceData(null, null)
 let ccPaceTimer: ReturnType<typeof setInterval> | null = null
 
 // ---- Display Helper ----
@@ -136,7 +139,9 @@ function getCompactHeight(settings: Settings, ccPace?: CcPaceData | null, beta?:
     settings.codex?.enabled && (settings.tray.showCodexCredits ?? true) && (beta?.codex?.hasCredits ?? false),
   ].filter(Boolean).length || 1
   const ccPaceExtra = (settings.tray.show5h && ccPace?.available && ccPace.burnRatePerMin != null) ? COMPACT_CCPACE_H : 0
-  return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD + ccPaceExtra
+  const codexPaceExtra = (settings.codex?.enabled && (settings.tray.showCodexPrimary ?? true)
+    && beta?.codex?.pace?.available && beta.codex.pace.burnRatePercentPerMin != null) ? COMPACT_CCPACE_H : 0
+  return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD + ccPaceExtra + codexPaceExtra
 }
 
 function getDetailHeight(settings: Settings, beta?: BetaProvidersData | null): number {
@@ -144,7 +149,9 @@ function getDetailHeight(settings: Settings, beta?: BetaProvidersData | null): n
   // 残高カードはクレジットを持つアカウントでのみ出る（詳細表示はトレイのトグルに従わない）
   const codexCredits = settings.codex?.enabled && beta?.codex?.hasCredits ? 1 : 0
   const betaCount = (bp.copilot?.enabled ? 1 : 0) + (settings.codex?.enabled ? 2 : 0) + codexCredits
-  return DETAIL_H_BASE + betaCount * DETAIL_BETA_H
+  const codexPaceExtra = beta?.codex?.pace?.available ? 18 : 0
+  const resetCreditsExtra = (beta?.codex?.rateLimitResetCreditsAvailable ?? 0) > 0 ? 14 : 0
+  return DETAIL_H_BASE + betaCount * DETAIL_BETA_H + codexPaceExtra + resetCreditsExtra
 }
 
 function getUltraHeight(settings: Settings, usage?: UsageData | null, beta?: BetaProvidersData | null): number {
@@ -339,7 +346,7 @@ function setUltraPosition(pos: UltraPosition): void {
   s.window.ultraPosition = pos
   saveSettings(s)
   if (hudWindow && !hudWindow.isDestroyed() && s.viewMode === 'ultra') {
-    const { w, h } = getWindowSize('ultra', s)
+    const { w } = getWindowSize('ultra', s)
     const { x, y } = getUltraSnapPosition(pos, w, hudWindow)
     hudWindow.setPosition(x, y)
   }
@@ -557,7 +564,8 @@ async function updateCcPace(): Promise<void> {
     settings.ccPaceCalibration?.estimatedLimitTokens ?? null,
     settings.ccPaceCalibration?.estimatedLimitUsd ?? null,
     settings.ccPaceCalibration?.sampleCount ?? 0,
-    settings.ccPaceCalibration?.lastResetsAt ?? null
+    settings.ccPaceCalibration?.lastResetsAt ?? null,
+    lastSuccessAt?.getTime() ?? null
   )
   if (lastCcPace.calibratedNow && lastCcPace.estimatedLimitTokens != null) {
     settings.ccPaceCalibration = {
@@ -620,7 +628,19 @@ async function doUpdateBeta(): Promise<void> {
 
   if (settings.codex?.enabled) {
     try {
-      results.codex = await codexFetcher.fetchData()
+      const codex = await codexFetcher.fetchData()
+      if (codex) {
+        const observedAt = Date.now()
+        saveCodexUsageHistory(codex, observedAt)
+        const history = getCodexPaceHistory(observedAt - 60 * 60 * 1000)
+        codex.pace = calculateCodexPace(
+          codex.fiveHourUtilization,
+          codex.fiveHourResetDate,
+          history,
+          observedAt
+        )
+      }
+      results.codex = codex
       log('doUpdateBeta: codex=', results.codex)
     } catch (e) {
       log('doUpdateBeta: codex error:', e)
@@ -875,14 +895,12 @@ function startLocalApiServer(): void {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
     })
-    res.end(JSON.stringify({
-      five_hour: lastUsage?.five_hour ?? null,
-      seven_day: lastUsage?.seven_day ?? null,
-      extra_usage: lastUsage?.extra_usage ?? null,
-      last_updated: lastSuccessAt?.toISOString() ?? null,
+    res.end(JSON.stringify(buildLocalUsagePayload({
+      usage: lastUsage,
+      lastUpdated: lastSuccessAt?.toISOString() ?? null,
       beta: lastBeta,
-      cc_pace: lastCcPace,
-    }))
+      claudePace: lastCcPace,
+    })))
   })
 
   server.listen(LOCAL_API_PORT, '127.0.0.1', () => {
@@ -969,15 +987,24 @@ function buildScreenshotBeta(): BetaProvidersData {
       fiveHourUtilization: 35, fiveHourResetDate: isoInHours(2.1),
       primaryWindowMinutes: 300, secondaryWindowMinutes: 10080, planType: 'plus',
       creditBalance: 222.68, creditsUnlimited: false, hasCredits: true,
+      rateLimitResetCreditsAvailable: 2,
+      pace: {
+        provider: 'codex', source: 'codex-rate-limit-delta', available: true,
+        burnRatePercentPerMin: 0.18, minutesToLimit: 361, minutesToReset: 126,
+        sampleWindowMinutes: 15, sampleCount: 4,
+      },
     },
   }
 }
 
 function buildScreenshotCcPace(): CcPaceData {
   return {
+    provider: 'claude', source: 'claude-code-jsonl',
     available: true, paceTokensInBlock: 148_000, burnRatePerMin: 1250, burnRateCostPerMin: 0.42,
     minutesToLimit: 95, minutesToReset: 140, estimatedLimitTokens: 620_000, estimatedLimitUsd: 18.5,
     calibratedNow: false, sampleCount: 6,
+    pricingCatalog: { source: 'bundled', updatedAt: '2026-08-26', reference: 'https://platform.claude.com/docs/en/about-claude/pricing' },
+    pricingFallbackModels: [], unpricedModels: [],
   }
 }
 
@@ -1154,6 +1181,7 @@ if (!gotTheLock) {
 
     // 起動時にキャッシュ済み orgUuid を復元
     const initialSettings = loadSettings()
+    await initializeModelPricing(app.getPath('userData'), log)
 
     // システム側の launch-at-login 状態を設定ファイルに同期
     const loginItemOpts = process.platform === 'win32' ? { path: process.execPath } : {}

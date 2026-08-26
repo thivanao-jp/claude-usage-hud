@@ -11,6 +11,7 @@ type ProviderStatus = 'logged-in' | 'logged-out' | 'unknown'
 const defaultSettings: Settings = {
   token: '',
   launchAtLogin: false,
+  autoUpdate: true,
   updateIntervalMinutes: 10,
   viewMode: 'compact',
   language: 'auto',

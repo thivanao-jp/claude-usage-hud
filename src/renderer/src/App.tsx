@@ -5,13 +5,15 @@ import { UltraCompactView } from './components/UltraCompactView'
 import { SettingsView } from './components/SettingsView'
 import { UsageData, ProfileData, Settings, ViewMode, BetaProvidersData, CcPaceData } from './types'
 import { DEFAULT_CREDIT_GAUGE_MAX } from './codexCredits'
-import { LangContext, useT } from './LangContext'
+import { LangContext } from './LangContext'
 import { ThemeContext } from './ThemeContext'
 import { resolveLang } from './i18n'
 import { ThemeTokens, ThemeSetting, resolveTheme } from './theme'
 
 const defaultSettings: Settings = {
   token: '',
+  launchAtLogin: false,
+  autoUpdate: true,
   updateIntervalMinutes: 10,
   viewMode: 'compact',
   language: 'auto',
@@ -47,7 +49,14 @@ function HudApp() {
   const [lastSuccessAt, setLastSuccessAt] = useState<Date | null>(null)
   const [isStale, setIsStale] = useState(false)
   const [beta, setBeta] = useState<BetaProvidersData>({ copilot: null, codex: null })
-  const [ccPace, setCcPace] = useState<CcPaceData>({ available: false, paceTokensInBlock: null, burnRatePerMin: null, burnRateCostPerMin: null, minutesToLimit: null, minutesToReset: null, estimatedLimitTokens: null, estimatedLimitUsd: null, calibratedNow: false, sampleCount: 0 })
+  const [ccPace, setCcPace] = useState<CcPaceData>({
+    provider: 'claude', source: 'claude-code-jsonl', available: false,
+    paceTokensInBlock: null, burnRatePerMin: null, burnRateCostPerMin: null,
+    minutesToLimit: null, minutesToReset: null, estimatedLimitTokens: null,
+    estimatedLimitUsd: null, calibratedNow: false, sampleCount: 0,
+    pricingCatalog: { source: 'bundled', updatedAt: '', reference: '' },
+    pricingFallbackModels: [], unpricedModels: [],
+  })
 
   useEffect(() => {
     window.api.getUsage().then(({ usage, profile }) => {

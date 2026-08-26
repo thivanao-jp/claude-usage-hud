@@ -47,6 +47,7 @@ Claude の使用状況をメニューバーとフローティングウィンド�
 - **Opus** — 7日間 Opus
 - **EX** — Extra 使用量（月次追加クレジット、有効時のみ表示）
 - **Codex** — 公式Codex CLIから取得する現在の利用枠（有効時のみ表示）
+- **燃費・航続** — Claude Codeはトークン/推定コスト、Codexは利用枠の`%/分`とプライマリ枠到達までの推定時間を表示
 - **β** — 試験的プロバイダーバー（GitHub Copilot — 有効時のみ表示）
 
 ### 詳細表示
@@ -148,6 +149,8 @@ GET http://127.0.0.1:49485/usage
 
 ```json
 {
+  "schema_version": 2,
+  "generated_at": "2026-08-26T04:51:40.000Z",
   "five_hour": {
     "utilization": 43,
     "resets_at": "2026-04-17T08:00:00.000Z"
@@ -157,7 +160,13 @@ GET http://127.0.0.1:49485/usage
     "resets_at": "2026-04-21T00:00:00.000Z"
   },
   "extra_usage": null,
-  "last_updated": "2026-04-17T04:51:38.831Z"
+  "last_updated": "2026-08-26T04:51:38.831Z",
+  "providers": {
+    "claude": { "pace": { "provider": "claude", "source": "claude-code-jsonl" } },
+    "codex": { "pace": { "provider": "codex", "source": "codex-rate-limit-delta" } }
+  },
+  "claude_code_pace": { "provider": "claude", "source": "claude-code-jsonl" },
+  "cc_pace": { "provider": "claude", "source": "claude-code-jsonl" }
 }
 ```
 
@@ -167,6 +176,11 @@ GET http://127.0.0.1:49485/usage
 | `seven_day` | 7日間ローリング枠 |
 | `extra_usage` | 月次追加クレジット、未有効時は `null` |
 | `last_updated` | 最後に成功したデータ取得のタイムスタンプ |
+| `providers` | プロバイダー別のv2正規形。ClaudeとCodexのpaceをフィールド名だけで判別できます。 |
+| `claude_code_pace` | Claude Code JSONL由来の燃費・航続。価格表情報、系列フォールバック、未価格モデルも含みます。 |
+| `cc_pace` | `claude_code_pace`の後方互換alias。Codexの予測値にはなりません。 |
+
+Claude単価表は、起動時にリポジトリ上のJSONを厳格に検証してからキャッシュします。そのため、単価だけの更新はアプリのリリースを伴いません。上級者はアプリのuser-dataディレクトリへ同じschemaの`modelPricing.override.json`を置くと、最後に上書き適用できます。
 
 直近の取得成功値を返します。未取得の枠は `null` になります。
 
