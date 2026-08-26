@@ -47,7 +47,7 @@ Always-on-top floating window showing usage bars at a glance.
 - **Opus** — 7-day Opus window
 - **EX** — Extra usage (monthly add-on credits, when enabled)
 - **Codex** — Current Codex rate-limit windows from the official Codex CLI (when enabled)
-- **Fuel / range** — Claude Code shows token and estimated-cost burn; Codex shows quota `%/min` and estimated time to its primary limit
+- **Fuel / range** — Claude Code shows approximate `$/min` using model-specific pricing; Codex shows quota `%/min` and estimated time to its primary limit
 - **β** — Experimental provider bar (GitHub Copilot — when enabled)
 
 ### Detail View

@@ -125,13 +125,10 @@ export function UsageCard({ label, description, entry, color, highlight, periodM
 
       <div style={{ fontSize: 10, color: th.textDesc, marginTop: 3 }}>{description}</div>
 
-      {ccPace?.available && ccPace.burnRatePerMin != null && (
+      {ccPace?.available && ccPace.burnRateCostPerMin != null && (
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: th.textMuted, marginTop: 3 }}>
           <span>
-            🔥 {t('ccPaceBurnRate', formatTokens(ccPace.burnRatePerMin))}
-            {ccPace.burnRateCostPerMin != null && ccPace.burnRateCostPerMin > 0 && (
-              <> {t('ccPaceCostRate', formatUsd(ccPace.burnRateCostPerMin))}</>
-            )}
+            🔥 {t('ccPaceBurnRate', formatUsd(ccPace.burnRateCostPerMin))}
             {ccPace.estimatedLimitUsd != null && ccPace.estimatedLimitUsd > 0 ? (
               <> {t('ccPaceLimitEstUsd', formatUsd(ccPace.estimatedLimitUsd))}</>
             ) : ccPace.estimatedLimitTokens != null && (

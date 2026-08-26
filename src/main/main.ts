@@ -138,7 +138,7 @@ function getCompactHeight(settings: Settings, ccPace?: CcPaceData | null, beta?:
     // 残高行はクレジットを持つアカウントでのみ出るので、データ確認後にだけ数える
     settings.codex?.enabled && (settings.tray.showCodexCredits ?? true) && (beta?.codex?.hasCredits ?? false),
   ].filter(Boolean).length || 1
-  const ccPaceExtra = (settings.tray.show5h && ccPace?.available && ccPace.burnRatePerMin != null) ? COMPACT_CCPACE_H : 0
+  const ccPaceExtra = (settings.tray.show5h && ccPace?.available && ccPace.burnRateCostPerMin != null) ? COMPACT_CCPACE_H : 0
   const codexPaceExtra = (settings.codex?.enabled && (settings.tray.showCodexPrimary ?? true)
     && beta?.codex?.pace?.available && beta.codex.pace.burnRatePercentPerMin != null) ? COMPACT_CCPACE_H : 0
   return COMPACT_BTN_H + COMPACT_BAR_H * count + COMPACT_PAD + ccPaceExtra + codexPaceExtra

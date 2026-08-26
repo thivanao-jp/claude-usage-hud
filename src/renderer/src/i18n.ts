@@ -29,8 +29,7 @@ const en = {
   remaining:      'Remaining',
 
   // ---- cc-pace-meter (car metaphor) ----
-  ccPaceBurnRate: 'CC fuel: {0} tok/min',
-  ccPaceCostRate: '(${0}/min)',
+  ccPaceBurnRate: 'CC fuel: ~${0}/min',
   ccPaceLimitEst: '(tank ~{0})',
   ccPaceLimitEstUsd: '(tank ~${0})',
   ccPaceRange: 'Range: ~{0}',
@@ -179,8 +178,7 @@ const ja = {
   resetLabel:     'リセット:',
   remaining:      '残り',
 
-  ccPaceBurnRate: 'CC燃費: {0} tok/分',
-  ccPaceCostRate: '(${0}/分)',
+  ccPaceBurnRate: 'CC燃費: 約${0}/分',
   ccPaceLimitEst: '(推定上限 ~{0})',
   ccPaceLimitEstUsd: '(推定上限 ~${0})',
   ccPaceRange: '航続: 約{0}',

@@ -252,13 +252,10 @@ export function CompactView({ usage, settings, beta, lastSuccessAt, isStale, ccP
                   }} />
                 </div>
               )}
-              {item.key === 'five_hour' && ccPace?.available && ccPace.burnRatePerMin != null && (
+              {item.key === 'five_hour' && ccPace?.available && ccPace.burnRateCostPerMin != null && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: th.textMuted, marginTop: 2, padding: '0 1px' }}>
                   <span>
-                    🔥 {t('ccPaceBurnRate', formatTokens(ccPace.burnRatePerMin))}
-                    {ccPace.burnRateCostPerMin != null && ccPace.burnRateCostPerMin > 0 && (
-                      <> {t('ccPaceCostRate', formatUsd(ccPace.burnRateCostPerMin))}</>
-                    )}
+                    🔥 {t('ccPaceBurnRate', formatUsd(ccPace.burnRateCostPerMin))}
                     {ccPace.estimatedLimitUsd != null && ccPace.estimatedLimitUsd > 0 ? (
                       <> {t('ccPaceLimitEstUsd', formatUsd(ccPace.estimatedLimitUsd))}</>
                     ) : ccPace.estimatedLimitTokens != null && (
