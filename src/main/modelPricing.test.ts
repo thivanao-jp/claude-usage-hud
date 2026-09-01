@@ -19,6 +19,23 @@ describe('model pricing', () => {
     expect(cost).toBeCloseTo(12, 8)
   })
 
+  it('prices Fable 5.1 cache reads at the discounted 0.025x rate, not the standard 0.1x', () => {
+    const price = getModelPrice('claude-fable-5-1-20260826')
+    expect(price?.input).toBe(10e-6)
+    expect(price?.output).toBe(50e-6)
+    expect(price?.cacheRead).toBeCloseTo(0.25e-6, 12)
+  })
+
+  it('keeps Fable 5 (non-5.1) on the standard 0.1x cache read rate', () => {
+    const price = getModelPrice('claude-fable-5-20260601')
+    expect(price?.cacheRead).toBeCloseTo(1e-6, 12)
+  })
+
+  it('does not let the shorter claude-fable-5 prefix shadow claude-fable-5-1', () => {
+    const resolution = resolveModelPrice('claude-fable-5-1-20260901')
+    expect(resolution.matchedPrefix).toBe('claude-fable-5-1')
+  })
+
   it('uses an explicit family fallback instead of silently returning zero', () => {
     const resolution = resolveModelPrice('claude-opus-6-preview')
     expect(resolution.match).toBe('family-fallback')

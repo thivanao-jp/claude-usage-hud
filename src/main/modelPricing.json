@@ -2,15 +2,15 @@
   "_meta": {
     "schemaVersion": 1,
     "source": "https://platform.claude.com/docs/en/about-claude/pricing",
-    "updatedAt": "2026-08-26",
-    "note": "モデルIDは最長の前方一致で照合。各値は標準ルーティングの USD/token。未知バージョンは familyFallbacks の同系列モデルで概算し、API診断にフォールバック使用を明示する。"
+    "updatedAt": "2026-09-02",
+    "note": "モデルIDは最長の前方一致で照合。各値は標準ルーティングの USD/token。未知バージョンは familyFallbacks の同系列モデルで概算し、API診断にフォールバック使用を明示する。Fable 5.1 / Mythos 5.1 はキャッシュ読み込みが標準倍率(0.1x)ではなく0.025xの専用倍率になっている点に注意。"
   },
   "familyFallbacks": {
     "opus": "claude-opus-5",
     "sonnet": "claude-sonnet-5",
     "haiku": "claude-haiku-4-5",
-    "fable": "claude-fable-5",
-    "mythos": "claude-mythos-5"
+    "fable": "claude-fable-5-1",
+    "mythos": "claude-mythos-5-1"
   },
   "models": {
     "claude-opus-5": {
@@ -68,6 +68,20 @@
       "cw5m": 1.875e-05,
       "cw1h": 3e-05,
       "cr": 1.5e-06
+    },
+    "claude-fable-5-1": {
+      "in": 1e-05,
+      "out": 5e-05,
+      "cw5m": 1.25e-05,
+      "cw1h": 2e-05,
+      "cr": 2.5e-07
+    },
+    "claude-mythos-5-1": {
+      "in": 1e-05,
+      "out": 5e-05,
+      "cw5m": 1.25e-05,
+      "cw1h": 2e-05,
+      "cr": 2.5e-07
     },
     "claude-fable-5": {
       "in": 1e-05,
