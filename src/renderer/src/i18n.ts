@@ -133,6 +133,24 @@ const en = {
   updateError:         'Update error',
   restartToUpdate:     'Restart to Update',
 
+  // ---- Model Pricing ----
+  sectionPricing:        'Model Pricing',
+  pricingHint:           'The pricing table used for burn-rate/cost estimates. Rechecked automatically from GitHub every 12 hours, so new models are picked up without needing an app update.',
+  pricingSourceLabel:    'Source: {0}',
+  pricingSourceBundled:  'Bundled with app',
+  pricingSourceCache:    'Cached from GitHub',
+  pricingSourceRemote:   'GitHub (just fetched)',
+  pricingSourceOverride: 'Local override',
+  pricingUpdatedAt:      'Catalog date: {0}',
+  pricingReference:      'Reference',
+  pricingColModel:       'Model',
+  pricingColInput:       'Input',
+  pricingColOutput:      'Output',
+  pricingColCacheWrite5m: 'Cache Write (5m)',
+  pricingColCacheWrite1h: 'Cache Write (1h)',
+  pricingColCacheRead:   'Cache Read',
+  pricingPerMTok:        '/MTok',
+
   // ---- Beta Providers ----
   sectionBeta:             'Beta Providers (Experimental)',
   betaHint:                'Experimental: fetch GitHub Copilot usage. This CLI-derived integration may change without notice.',
@@ -276,6 +294,24 @@ const ja = {
   updateNotAvailable:  '最新バージョンです',
   updateError:         'アップデートエラー',
   restartToUpdate:     '再起動してアップデート',
+
+  // ---- Model Pricing ----
+  sectionPricing:        'モデル単価表',
+  pricingHint:           '燃費・コスト計算に使う単価表です。GitHubから12時間おきに自動チェックするため、アプリのアップデート無しに新モデルへ追随します。',
+  pricingSourceLabel:    '取得元: {0}',
+  pricingSourceBundled:  'アプリ内蔵',
+  pricingSourceCache:    'GitHubからのキャッシュ',
+  pricingSourceRemote:   'GitHub (取得直後)',
+  pricingSourceOverride: 'ローカルoverride',
+  pricingUpdatedAt:      '単価表の日付: {0}',
+  pricingReference:      '参照元',
+  pricingColModel:       'モデル',
+  pricingColInput:       '入力',
+  pricingColOutput:      '出力',
+  pricingColCacheWrite5m: 'キャッシュ書込(5分)',
+  pricingColCacheWrite1h: 'キャッシュ書込(1時間)',
+  pricingColCacheRead:   'キャッシュ読込',
+  pricingPerMTok:        '/MTok',
 
   // ---- Beta Providers ----
   sectionBeta:             'β プロバイダー (試験的)',

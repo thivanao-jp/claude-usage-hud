@@ -169,6 +169,26 @@ export interface CcPaceData {
   unpricedModels: string[]
 }
 
+// ---- モデル単価表(設定画面表示用) ----
+
+export interface PricingCatalogModelEntry {
+  id: string
+  input: number
+  output: number
+  cacheWrite5m: number
+  cacheWrite1h: number
+  cacheRead: number
+}
+
+export interface PricingCatalogSnapshot {
+  status: {
+    source: 'bundled' | 'cache' | 'remote' | 'override'
+    updatedAt: string
+    reference: string
+  }
+  models: PricingCatalogModelEntry[]
+}
+
 export interface HistoryRow {
   recorded_at: string
   five_hour: number | null
@@ -219,6 +239,9 @@ declare global {
       checkForUpdates: () => Promise<void>
       installUpdate: () => Promise<void>
       onUpdateStatus: (cb: (status: UpdateStatus) => void) => () => void
+      getPricingCatalog: () => Promise<PricingCatalogSnapshot>
+      refreshPricingCatalog: () => Promise<PricingCatalogSnapshot>
+      onPricingCatalogUpdated: (cb: (snapshot: PricingCatalogSnapshot) => void) => () => void
       setIgnoreMouseEvents: (ignore: boolean) => void
       setWindowOpacity: (opacity: number) => void
       // cc-pace-meter

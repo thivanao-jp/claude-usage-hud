@@ -188,6 +188,25 @@ export function getPricingCatalogStatus(): PricingCatalogStatus {
   return { ...catalogStatus }
 }
 
+export interface PricingCatalogModelEntry extends ModelPrice {
+  id: string
+}
+
+export interface PricingCatalogSnapshot {
+  status: PricingCatalogStatus
+  models: PricingCatalogModelEntry[]
+}
+
+/** 設定画面表示用に、現在有効な単価表を取得日付付きでスナップショットする。 */
+export function getPricingCatalogSnapshot(): PricingCatalogSnapshot {
+  return {
+    status: getPricingCatalogStatus(),
+    models: Object.entries(activeCatalog.models)
+      .map(([id, p]) => ({ id, ...rawToPrice(p) }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  }
+}
+
 function modelFamily(model: string): string | null {
   return Object.keys(activeCatalog.familyFallbacks).find(family =>
     new RegExp(`(^|[-_.])${family}($|[-_.])`, 'i').test(model)

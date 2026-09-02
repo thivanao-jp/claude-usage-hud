@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Settings, UsageData, UpdateStatus } from '../types'
+import { PricingCatalogSnapshot, Settings, UsageData, UpdateStatus } from '../types'
 import { useT } from '../LangContext'
 import { useLang } from '../LangContext'
 import { useTheme } from '../ThemeContext'
@@ -52,6 +52,8 @@ export function SettingsView({ onSettingsChange }: Props) {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
   const [copilotStatus, setCopilotStatus] = useState<ProviderStatus>('unknown')
   const [codexStatus, setCodexStatus] = useState<ProviderStatus>('unknown')
+  const [pricingCatalog, setPricingCatalog] = useState<PricingCatalogSnapshot | null>(null)
+  const [pricingRefreshing, setPricingRefreshing] = useState(false)
 
   useEffect(() => {
     window.api.getSettings().then(setS)
@@ -60,10 +62,21 @@ export function SettingsView({ onSettingsChange }: Props) {
     window.api.getAppVersion().then(setAppVersion)
     window.api.getCopilotLoginStatus().then(setCopilotStatus)
     window.api.getCodexLoginStatus().then(setCodexStatus)
+    window.api.getPricingCatalog().then(setPricingCatalog)
     const offLogin = window.api.onLoginStatusChanged(status => setLoginStatus(status))
     const offUpdate = window.api.onUpdateStatus(status => setUpdateStatus(status as UpdateStatus))
-    return () => { offLogin(); offUpdate() }
+    const offPricing = window.api.onPricingCatalogUpdated(snapshot => setPricingCatalog(snapshot))
+    return () => { offLogin(); offUpdate(); offPricing() }
   }, [])
+
+  async function handleRefreshPricing() {
+    setPricingRefreshing(true)
+    try {
+      setPricingCatalog(await window.api.refreshPricingCatalog())
+    } finally {
+      setPricingRefreshing(false)
+    }
+  }
 
   async function handleSave() {
     await window.api.saveSettings(s)
@@ -94,6 +107,26 @@ export function SettingsView({ onSettingsChange }: Props) {
     fontSize: 12,
     cursor: 'pointer',
     whiteSpace: 'nowrap',
+  }
+
+  const pricingThStyle: React.CSSProperties = {
+    textAlign: 'left',
+    padding: '4px 8px',
+    color: th.textFaint,
+    fontWeight: 600,
+    borderBottom: `1px solid ${th.borderSection}`,
+    whiteSpace: 'nowrap',
+    position: 'sticky',
+    top: 0,
+    background: th.bgPanel,
+  }
+
+  const pricingTdStyle: React.CSSProperties = {
+    padding: '3px 8px',
+    color: th.textSub,
+    borderBottom: `1px solid ${th.borderSection}`,
+    whiteSpace: 'nowrap',
+    fontVariantNumeric: 'tabular-nums',
   }
 
   return (
@@ -424,12 +457,81 @@ export function SettingsView({ onSettingsChange }: Props) {
         )}
       </Section>
 
+      {/* Model Pricing */}
+      <Section title={t('sectionPricing')} th={th}>
+        <div style={{ fontSize: 11, color: th.textFaint2, marginBottom: 8 }}>{t('pricingHint')}</div>
+        {pricingCatalog && (
+          <>
+            <div style={{ fontSize: 12, color: th.textLabel, marginBottom: 8 }}>
+              {t('pricingSourceLabel', pricingSourceText(pricingCatalog.status.source, t))}
+              {' ・ '}
+              {t('pricingUpdatedAt', pricingCatalog.status.updatedAt)}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+              <button
+                onClick={handleRefreshPricing}
+                disabled={pricingRefreshing}
+                style={{ ...secondaryBtn, opacity: pricingRefreshing ? 0.5 : 1 }}
+              >
+                {pricingRefreshing ? t('updateChecking') : t('checkNow')}
+              </button>
+              <span
+                onClick={() => window.api.openExternal(pricingCatalog.status.reference)}
+                style={{ fontSize: 11, color: th.textFaint2, cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                {t('pricingReference')}
+              </span>
+            </div>
+            <div style={{ maxHeight: 220, overflowY: 'auto', border: `1px solid ${th.borderSection}`, borderRadius: 6 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                <thead>
+                  <tr>
+                    <th style={pricingThStyle}>{t('pricingColModel')}</th>
+                    <th style={pricingThStyle}>{t('pricingColInput')}</th>
+                    <th style={pricingThStyle}>{t('pricingColOutput')}</th>
+                    <th style={pricingThStyle}>{t('pricingColCacheWrite5m')}</th>
+                    <th style={pricingThStyle}>{t('pricingColCacheWrite1h')}</th>
+                    <th style={pricingThStyle}>{t('pricingColCacheRead')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pricingCatalog.models.map(m => (
+                    <tr key={m.id}>
+                      <td style={pricingTdStyle}>{m.id}</td>
+                      <td style={pricingTdStyle}>{formatPerMTok(m.input)}</td>
+                      <td style={pricingTdStyle}>{formatPerMTok(m.output)}</td>
+                      <td style={pricingTdStyle}>{formatPerMTok(m.cacheWrite5m)}</td>
+                      <td style={pricingTdStyle}>{formatPerMTok(m.cacheWrite1h)}</td>
+                      <td style={pricingTdStyle}>{formatPerMTok(m.cacheRead)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: 10, color: th.textFaint2, marginTop: 4 }}>{t('pricingPerMTok')}</div>
+          </>
+        )}
+      </Section>
+
       {/* Save */}
       <button onClick={handleSave} style={primaryBtn}>
         {saved ? t('savedConfirm') : t('saveSettings')}
       </button>
     </div>
   )
+}
+
+function formatPerMTok(perToken: number): string {
+  return `$${(perToken * 1_000_000).toFixed(2)}`
+}
+
+function pricingSourceText(source: PricingCatalogSnapshot['status']['source'], t: ReturnType<typeof useT>): string {
+  switch (source) {
+    case 'bundled': return t('pricingSourceBundled')
+    case 'cache': return t('pricingSourceCache')
+    case 'remote': return t('pricingSourceRemote')
+    case 'override': return t('pricingSourceOverride')
+  }
 }
 
 function StatusDot({ status, t }: { status: ProviderStatus; t: ReturnType<typeof useT> }) {
