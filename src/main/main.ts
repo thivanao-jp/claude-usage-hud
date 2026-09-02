@@ -26,7 +26,7 @@ import { CodexFetcher } from './codexFetcher'
 import { createBarIcon } from './trayIcon'
 import { pollCcUsage, getCcPaceData, getBootstrapEstimate, CcPaceData, HistoryPoint, BOOTSTRAP_LOOKBACK_MS } from './ccPaceMeter'
 import { calculateCodexPace } from './codexPaceMeter'
-import { initializeModelPricing } from './modelPricing'
+import { getPricingCatalogSnapshot, initializeModelPricing } from './modelPricing'
 import { buildLocalUsagePayload } from './localUsagePayload'
 
 // ---- Screenshot / Debug Mock Mode ----
@@ -74,6 +74,7 @@ let hudWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
 let updateTimer: ReturnType<typeof setInterval> | null = null
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null
+let pricingCatalogTimer: ReturnType<typeof setInterval> | null = null
 let updateDownloaded = false
 let dragRestoreTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -765,6 +766,11 @@ ipcMain.handle('hide-login-window', () => claudeWebFetcher.hideLoginWindow())
 ipcMain.handle('get-login-status', () => claudeWebFetcher.getLoginStatus())
 ipcMain.handle('get-app-version', () => app.getVersion())
 ipcMain.handle('check-for-updates', () => autoUpdater.checkForUpdates().catch(e => log('update check error:', e)))
+ipcMain.handle('get-pricing-catalog', () => getPricingCatalogSnapshot())
+ipcMain.handle('refresh-pricing-catalog', async () => {
+  await initializeModelPricing(app.getPath('userData'), log)
+  return getPricingCatalogSnapshot()
+})
 ipcMain.handle('install-update', () => quitAndInstall())
 ipcMain.on('set-ignore-mouse-events', (event, ignore: boolean) => {
   const win = BrowserWindow.fromWebContents(event.sender)
@@ -811,6 +817,22 @@ function broadcastToWindows(channel: string, ...args: unknown[]): void {
   for (const win of [hudWindow, settingsWindow]) {
     if (win && !win.isDestroyed()) win.webContents.send(channel, ...args)
   }
+}
+
+// 単価表(modelPricing.json)はGitHub raw経由でも配信されるため、アプリのバージョンアップ無しに
+// 半日おきの再チェックだけで新モデル・新単価に追随できる。
+const PRICING_CATALOG_RECHECK_MS = 12 * 60 * 60 * 1000
+
+function schedulePricingCatalogRefresh(): void {
+  if (pricingCatalogTimer) clearInterval(pricingCatalogTimer)
+  pricingCatalogTimer = setInterval(async () => {
+    const before = getPricingCatalogSnapshot().status
+    const status = await initializeModelPricing(app.getPath('userData'), log)
+    if (status.updatedAt !== before.updatedAt || status.source !== before.source) {
+      log('Pricing catalog refreshed:', status)
+      broadcastToWindows('pricing-catalog-updated', getPricingCatalogSnapshot())
+    }
+  }, PRICING_CATALOG_RECHECK_MS)
 }
 
 function setupAutoUpdater(): void {
@@ -1182,6 +1204,7 @@ if (!gotTheLock) {
     // 起動時にキャッシュ済み orgUuid を復元
     const initialSettings = loadSettings()
     await initializeModelPricing(app.getPath('userData'), log)
+    schedulePricingCatalogRefresh()
 
     // システム側の launch-at-login 状態を設定ファイルに同期
     const loginItemOpts = process.platform === 'win32' ? { path: process.execPath } : {}

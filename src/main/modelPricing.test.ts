@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { mkdtemp, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { calcPaceCostUsd, getModelPrice, initializeModelPricing, resolveModelPrice } from './modelPricing'
+import { calcPaceCostUsd, getModelPrice, getPricingCatalogSnapshot, initializeModelPricing, resolveModelPrice } from './modelPricing'
 
 let tempDir: string | null = null
 afterAll(async () => { if (tempDir) await rm(tempDir, { recursive: true, force: true }) })
@@ -47,6 +47,14 @@ describe('model pricing', () => {
     expect(resolveModelPrice('new-provider-mystery-1')).toEqual({
       price: null, matchedPrefix: null, match: 'unpriced',
     })
+  })
+
+  it('exposes a settings-UI-friendly snapshot with catalog status and every model', () => {
+    const snapshot = getPricingCatalogSnapshot()
+    expect(snapshot.status.source).toBeTruthy()
+    expect(snapshot.status.updatedAt).toBeTruthy()
+    const fable51 = snapshot.models.find(m => m.id === 'claude-fable-5-1')
+    expect(fable51?.cacheRead).toBeCloseTo(0.25e-6, 12)
   })
 
   it('accepts a validated data-only remote catalog and caches it', async () => {

@@ -37,6 +37,12 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('update-status', (_e, status) => cb(status))
     return () => ipcRenderer.removeAllListeners('update-status')
   },
+  getPricingCatalog: () => ipcRenderer.invoke('get-pricing-catalog'),
+  refreshPricingCatalog: () => ipcRenderer.invoke('refresh-pricing-catalog'),
+  onPricingCatalogUpdated: (cb: (snapshot: unknown) => void) => {
+    ipcRenderer.on('pricing-catalog-updated', (_e, snapshot) => cb(snapshot))
+    return () => ipcRenderer.removeAllListeners('pricing-catalog-updated')
+  },
   setIgnoreMouseEvents: (ignore: boolean) => ipcRenderer.send('set-ignore-mouse-events', ignore),
   setWindowOpacity: (opacity: number) => ipcRenderer.send('set-window-opacity', opacity),
   // cc-pace-meter
