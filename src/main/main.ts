@@ -830,8 +830,8 @@ function schedulePricingCatalogRefresh(): void {
     const status = await initializeModelPricing(app.getPath('userData'), log)
     if (status.updatedAt !== before.updatedAt || status.source !== before.source) {
       log('Pricing catalog refreshed:', status)
+      broadcastToWindows('pricing-catalog-updated', getPricingCatalogSnapshot())
     }
-    broadcastToWindows('pricing-catalog-updated', getPricingCatalogSnapshot())
   }, PRICING_CATALOG_RECHECK_MS)
 }
 
