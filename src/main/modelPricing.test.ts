@@ -8,6 +8,14 @@ let tempDir: string | null = null
 afterAll(async () => { if (tempDir) await rm(tempDir, { recursive: true, force: true }) })
 
 describe('model pricing', () => {
+  it('prices Opus 5.5 separately from Opus 5, including its 0.05x cache reads', () => {
+    const resolution = resolveModelPrice('claude-opus-5-5-20260922')
+    expect(resolution.matchedPrefix).toBe('claude-opus-5-5')
+    expect(resolution.price).toEqual({
+      input: 4e-6, output: 20e-6, cacheWrite5m: 5e-6, cacheWrite1h: 8e-6, cacheRead: 0.2e-6,
+    })
+  })
+
   it('prices Opus 5 with the official $5/$25 rates', () => {
     const price = getModelPrice('claude-opus-5-20260826')
     expect(price?.input).toBe(5e-6)
@@ -39,8 +47,8 @@ describe('model pricing', () => {
   it('uses an explicit family fallback instead of silently returning zero', () => {
     const resolution = resolveModelPrice('claude-opus-6-preview')
     expect(resolution.match).toBe('family-fallback')
-    expect(resolution.matchedPrefix).toBe('claude-opus-5')
-    expect(resolution.price?.output).toBe(25e-6)
+    expect(resolution.matchedPrefix).toBe('claude-opus-5-5')
+    expect(resolution.price?.output).toBe(20e-6)
   })
 
   it('still marks an unrecognizable model as unpriced', () => {
