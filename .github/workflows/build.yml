@@ -15,7 +15,7 @@ env:
 jobs:
   build-mac:
     name: Build macOS
-    runs-on: macos-15
+    runs-on: macos-latest
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -31,13 +31,35 @@ jobs:
       - name: Add node_modules/.bin to PATH
         run: echo "${GITHUB_WORKSPACE}/node_modules/.bin" >> $GITHUB_PATH
 
+      # electron-builder 24 は CSC_LINK から一時キーチェーンを作る際、set-key-partition-list に
+      # キーチェーンではなく証明書のパスワードを渡しており、macos-26 の 2026-10 以降のイメージでは
+      # SecKeychainUnlock で失敗する。証明書は自前のキーチェーンに取り込み、CSC_KEYCHAIN で渡す。
+      - name: Import signing certificate
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          if [[ "$CSC_LINK" == http* ]]; then
+            curl -fsSL "$CSC_LINK" -o "$RUNNER_TEMP/cert.p12"
+          else
+            echo "$CSC_LINK" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          fi
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          echo "CSC_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+
       - name: Build & publish macOS
         timeout-minutes: 115
         run: npm run build && electron-builder --mac --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
