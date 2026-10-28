@@ -4,3 +4,4 @@ out/
 *.db
 .DS_Store
 build/icon.iconset/
+*.tsbuildinfo
