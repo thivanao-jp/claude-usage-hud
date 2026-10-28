@@ -18,6 +18,8 @@ export class ClaudeWebFetcher {
   private win: BrowserWindow | null = null
   private loginStatus: LoginStatus = 'unknown'
   private orgUuid: string | null = null
+  // 読み込み失敗時もエラーページの getURL() は元の claude.ai を返すため、URL だけでは読み込み済みと区別できない
+  private needsReload = false
   private statusChangeCallback: ((status: LoginStatus) => void) | null = null
   private orgUuidChangedCallback: ((uuid: string) => void) | null = null
   private logCallback: ((...args: unknown[]) => void) | null = null
@@ -86,6 +88,13 @@ export class ClaudeWebFetcher {
       }
     })
 
+    // 起動直後のネットワーク未接続などで読み込みに失敗したら、次回アクセス時に読み込み直す
+    win.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame || errorCode === -3) return  // -3 (ERR_ABORTED) はリダイレクト等による中断
+      this.needsReload = true
+      this.log('claudeWebFetcher: load failed', errorCode, errorDescription, validatedURL)
+    })
+
     // × ボタンで閉じられたら hide（セッション保持のため destroy しない）
     win.on('close', (e) => {
       e.preventDefault()
@@ -107,8 +116,9 @@ export class ClaudeWebFetcher {
   private async loadClaudeAi(): Promise<void> {
     const win = this.ensureWindow()
     const current = win.webContents.getURL()
-    if (current.includes('claude.ai')) return  // すでに読み込み済み
+    if (current.includes('claude.ai') && !this.needsReload) return  // すでに読み込み済み
 
+    this.needsReload = false
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Load timeout')), 20000)
       win.webContents.once('did-finish-load', () => { clearTimeout(timer); resolve() })
@@ -227,6 +237,10 @@ export class ClaudeWebFetcher {
       const statusNum = typeof errCode === 'number'
         ? errCode
         : parseInt(String(errCode).replace(/\D/g, '')) || 0
+      // HTTP ステータスが無い失敗はページ自体が壊れている（エラーページのまま等）ので次回読み込み直す
+      if (String(errCode).includes('Failed to fetch')) {
+        this.needsReload = true
+      }
       if (statusNum === 401 || statusNum === 403) {
         this.orgUuid = null  // キャッシュも無効化
         this.setLoginStatus('logged-out')
@@ -299,7 +313,8 @@ export class ClaudeWebFetcher {
     const win = this.ensureWindow()
     const current = win.webContents.getURL()
 
-    if (!current.includes('claude.ai')) {
+    if (!current.includes('claude.ai') || this.needsReload) {
+      this.needsReload = false
       // ページ読み込みが完了してから表示（白画面防止）
       await new Promise<void>((resolve) => {
         win.webContents.once('did-finish-load', resolve)
