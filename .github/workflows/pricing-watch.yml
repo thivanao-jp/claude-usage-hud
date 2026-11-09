@@ -1,0 +1,109 @@
+name: Pricing Watch
+
+# 公式の料金ページを毎日確認し、モデルの追加や単価の変更があれば単価表を更新するPRを作る。
+# 単価表は main にマージした時点でインストール済みのアプリへ配信されるので、マージは人が確認してから行う。
+# ページの形が変わって読めなくなったときは Issue を立てて知らせる。
+
+on:
+  schedule:
+    - cron: '17 0 * * *' # 毎日 9:17 JST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  BRANCH: bot/pricing-update
+
+concurrency:
+  group: pricing-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Compare pricing page with the catalog
+        id: check
+        run: |
+          set +e
+          node scripts/pricing-watch.mjs --write --summary "$RUNNER_TEMP/summary.md"
+          code=$?
+          set -e
+          if [ "$code" = "0" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          elif [ "$code" = "10" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            exit "$code"
+          fi
+
+      - name: Run pricing tests
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx vitest run src/main/modelPricing.test.ts scripts/pricing-watch.test.mjs
+
+      - name: Open or update the pull request
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # 同じ変更をすでに提案済みなら（日付以外が同じなら）何もしない。毎日の重複通知を防ぐ
+          if git fetch --quiet origin "$BRANCH" 2>/dev/null; then
+            git show "origin/$BRANCH:src/main/modelPricing.json" > "$RUNNER_TEMP/proposed.json"
+            if node -e '
+              const fs = require("fs")
+              const strip = p => { const c = JSON.parse(fs.readFileSync(p, "utf8")); delete c._meta.updatedAt; return JSON.stringify(c) }
+              process.exit(strip(process.argv[1]) === strip(process.argv[2]) ? 0 : 1)
+            ' "$RUNNER_TEMP/proposed.json" src/main/modelPricing.json; then
+              echo "already proposed on $BRANCH; nothing to do"
+              exit 0
+            fi
+          fi
+          git checkout -B "$BRANCH"
+          git add src/main/modelPricing.json
+          git commit -m "chore: 料金ページの変更を単価表に反映（自動）"
+          git push --force origin "$BRANCH"
+          title="chore: 料金ページの変更を単価表に反映（自動検出 $(TZ=Asia/Tokyo date +%Y-%m-%d)）"
+          existing=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --title "$title" --body-file "$RUNNER_TEMP/summary.md"
+            gh pr comment "$existing" --body "料金ページの内容が更新されたため、このPRの変更を作り直しました。"
+          elif ! gh pr create --base main --head "$BRANCH" --title "$title" \
+              --body-file "$RUNNER_TEMP/summary.md" --assignee "${{ github.repository_owner }}"; then
+            # リポジトリ設定「Allow GitHub Actions to create and approve pull requests」が
+            # オフだとPRを作れないため、Issueで知らせてPR作成画面へのリンクを渡す
+            compare="${{ github.server_url }}/${{ github.repository }}/compare/main...$BRANCH?expand=1"
+            { echo "単価表の更新を \`$BRANCH\` ブランチに用意しました。PRを作る: $compare"; echo; cat "$RUNNER_TEMP/summary.md"; } > "$RUNNER_TEMP/issue.md"
+            existing_issue=$(gh issue list --state open --search "in:title \"単価表の更新があります\"" --json number -q '.[0].number')
+            if [ -n "$existing_issue" ]; then
+              gh issue comment "$existing_issue" --body-file "$RUNNER_TEMP/issue.md"
+            else
+              gh issue create --title "単価表の更新があります（料金ページの変更を検出）" \
+                --body-file "$RUNNER_TEMP/issue.md" --assignee "${{ github.repository_owner }}"
+            fi
+          fi
+
+      - name: Report a failure as an issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          title="Pricing Watch が料金ページを読めませんでした"
+          url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          existing=$(gh issue list --state open --search "in:title \"$title\"" --json number -q '.[0].number')
+          body="料金ページの形が変わったか、取得に失敗しました。単価表が自動で追随できていない可能性があります。ログ: $url"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body" --assignee "${{ github.repository_owner }}"
+          fi
