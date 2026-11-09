@@ -98,10 +98,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          title="Pricing Watch が料金ページを読めませんでした"
+          title="Pricing Watch が失敗しました"
           url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           existing=$(gh issue list --state open --search "in:title \"$title\"" --json number -q '.[0].number')
-          body="料金ページの形が変わったか、取得に失敗しました。単価表が自動で追随できていない可能性があります。ログ: $url"
+          body="料金ページの形が変わった・取得に失敗した・単価のテストが通らなかった、のいずれかです。単価表が自動で追随できていない可能性があります。ログ: $url"
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --body "$body"
           else
