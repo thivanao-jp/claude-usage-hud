@@ -2,15 +2,15 @@
   "_meta": {
     "schemaVersion": 1,
     "source": "https://platform.claude.com/docs/en/about-claude/pricing",
-    "updatedAt": "2026-09-27",
-    "note": "モデルIDは最長の前方一致で照合。各値は標準ルーティングの USD/token。未知バージョンは familyFallbacks の同系列モデルで概算し、API診断にフォールバック使用を明示する。Fable 5.1 / Mythos 5.1 はキャッシュ読み込みが標準倍率(0.1x)ではなく0.025x、Opus 5.5 は0.05xの専用倍率になっている点に注意。"
+    "updatedAt": "2026-11-10",
+    "note": "モデルIDは最長の前方一致で照合。各値は標準ルーティングの USD/token。未知バージョンは familyFallbacks の同系列モデルで概算し、API診断にフォールバック使用を明示する。Fable 5.2 / Mythos 5.2 / Fable 5.1 / Mythos 5.1 はキャッシュ読み込みが標準倍率(0.1x)ではなく0.025x、Opus 5.5 / Sonnet 5.5 は0.05xの専用倍率。Haiku 5.5 はプロンプト10万トークン以下の単価を載せている（超えると5倍。この表は段階料金を持てないため概算）。"
   },
   "familyFallbacks": {
     "opus": "claude-opus-5-5",
-    "sonnet": "claude-sonnet-5",
-    "haiku": "claude-haiku-4-5",
-    "fable": "claude-fable-5-1",
-    "mythos": "claude-mythos-5-1"
+    "sonnet": "claude-sonnet-5-5",
+    "haiku": "claude-haiku-5-5",
+    "fable": "claude-fable-5-2",
+    "mythos": "claude-mythos-5-2"
   },
   "models": {
     "claude-opus-5-5": {
@@ -76,6 +76,20 @@
       "cw1h": 3e-05,
       "cr": 1.5e-06
     },
+    "claude-fable-5-2": {
+      "in": 8e-06,
+      "out": 4e-05,
+      "cw5m": 1e-05,
+      "cw1h": 1.6e-05,
+      "cr": 2e-07
+    },
+    "claude-mythos-5-2": {
+      "in": 8e-06,
+      "out": 4e-05,
+      "cw5m": 1e-05,
+      "cw1h": 1.6e-05,
+      "cr": 2e-07
+    },
     "claude-fable-5-1": {
       "in": 1e-05,
       "out": 5e-05,
@@ -103,6 +117,13 @@
       "cw5m": 1.25e-05,
       "cw1h": 2e-05,
       "cr": 1e-06
+    },
+    "claude-sonnet-5-5": {
+      "in": 2e-06,
+      "out": 1e-05,
+      "cw5m": 2.5e-06,
+      "cw1h": 4e-06,
+      "cr": 1e-07
     },
     "claude-sonnet-5": {
       "in": 2e-06,
@@ -152,6 +173,13 @@
       "cw5m": 3.75e-06,
       "cw1h": 6e-06,
       "cr": 3e-07
+    },
+    "claude-haiku-5-5": {
+      "in": 1e-07,
+      "out": 5e-07,
+      "cw5m": 1.25e-07,
+      "cw1h": 2e-07,
+      "cr": 1e-08
     },
     "claude-haiku-4-5": {
       "in": 1e-06,

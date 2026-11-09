@@ -217,7 +217,11 @@ function modelFamily(model: string): string | null {
 export function resolveModelPrice(model: string | undefined | null): ModelPriceResolution {
   if (!model) return { price: null, matchedPrefix: null, match: 'unpriced' }
   const normalized = model.toLowerCase()
-  const exact = pricingEntries.find(p => normalized.startsWith(p.prefix))
+  // 前方一致は区切り（末尾・"-"・"[" 等）で止める。"claude-fable-5-2" が日付付きの
+  // "claude-fable-5-20260601"（Fable 5）に一致してしまうのを防ぐ。
+  const exact = pricingEntries.find(p =>
+    normalized.startsWith(p.prefix) && !/^[a-z0-9]/.test(normalized.slice(p.prefix.length))
+  )
   if (exact) return { price: exact.price, matchedPrefix: exact.prefix, match: 'exact-prefix' }
 
   const family = modelFamily(normalized)
