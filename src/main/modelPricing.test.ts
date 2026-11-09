@@ -65,6 +65,24 @@ describe('model pricing', () => {
     expect(resolveModelPrice('claude-opus-4-6[1m]').matchedPrefix).toBe('claude-opus-4-6')
   })
 
+  it('applies Haiku 5.5 long-context prices only when the whole prompt exceeds 100K tokens', () => {
+    // 10万ちょうど（キャッシュ読み込み込み）は基本単価
+    const atLimit = calcPaceCostUsd({ input_tokens: 10_000, cache_read_input_tokens: 90_000, output_tokens: 1_000_000 }, 'claude-haiku-5-5')
+    expect(atLimit).toBeCloseTo(10_000 * 0.1e-6 + 1_000_000 * 0.5e-6, 9)
+    // キャッシュ読み込みで閾値を超えると、入力・出力とも高い単価
+    const over = calcPaceCostUsd({ input_tokens: 10_000, cache_read_input_tokens: 90_001, output_tokens: 1_000_000 }, 'claude-haiku-5-5')
+    expect(over).toBeCloseTo(10_000 * 0.5e-6 + 1_000_000 * 2.5e-6, 9)
+    // キャッシュ書き込みの内訳もプロンプト長に数え、高い書き込み単価を使う
+    const overByWrite = calcPaceCostUsd({
+      input_tokens: 1_000, cache_creation_input_tokens: 120_000,
+      cache_creation: { ephemeral_5m_input_tokens: 100_000, ephemeral_1h_input_tokens: 20_000 },
+    }, 'claude-haiku-5-5')
+    expect(overByWrite).toBeCloseTo(1_000 * 0.5e-6 + 100_000 * 0.625e-6 + 20_000 * 1e-6, 9)
+    // 段階料金の無いモデルは長いプロンプトでも基本単価
+    const opus = calcPaceCostUsd({ input_tokens: 500_000 }, 'claude-opus-5-5')
+    expect(opus).toBeCloseTo(500_000 * 4e-6, 9)
+  })
+
   it('uses an explicit family fallback instead of silently returning zero', () => {
     const resolution = resolveModelPrice('claude-opus-6-preview')
     expect(resolution.match).toBe('family-fallback')
