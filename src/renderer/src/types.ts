@@ -178,6 +178,14 @@ export interface PricingCatalogModelEntry {
   cacheWrite5m: number
   cacheWrite1h: number
   cacheRead: number
+  longContext?: {
+    overPromptTokens: number
+    input: number
+    output: number
+    cacheWrite5m: number
+    cacheWrite1h: number
+    cacheRead: number
+  }
 }
 
 export interface PricingCatalogSnapshot {

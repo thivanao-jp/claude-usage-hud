@@ -495,16 +495,34 @@ export function SettingsView({ onSettingsChange }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {pricingCatalog.models.map(m => (
-                    <tr key={m.id}>
-                      <td style={pricingTdStyle}>{m.id}</td>
-                      <td style={pricingTdStyle}>{formatPerMTok(m.input)}</td>
-                      <td style={pricingTdStyle}>{formatPerMTok(m.output)}</td>
-                      <td style={pricingTdStyle}>{formatPerMTok(m.cacheWrite5m)}</td>
-                      <td style={pricingTdStyle}>{formatPerMTok(m.cacheWrite1h)}</td>
-                      <td style={pricingTdStyle}>{formatPerMTok(m.cacheRead)}</td>
-                    </tr>
-                  ))}
+                  {pricingCatalog.models.flatMap(m => {
+                    const rows = [
+                      <tr key={m.id}>
+                        <td style={pricingTdStyle}>{m.id}</td>
+                        <td style={pricingTdStyle}>{formatPerMTok(m.input)}</td>
+                        <td style={pricingTdStyle}>{formatPerMTok(m.output)}</td>
+                        <td style={pricingTdStyle}>{formatPerMTok(m.cacheWrite5m)}</td>
+                        <td style={pricingTdStyle}>{formatPerMTok(m.cacheWrite1h)}</td>
+                        <td style={pricingTdStyle}>{formatPerMTok(m.cacheRead)}</td>
+                      </tr>,
+                    ]
+                    const lc = m.longContext
+                    if (lc) {
+                      rows.push(
+                        <tr key={`${m.id}-long`}>
+                          <td style={{ ...pricingTdStyle, color: th.textFaint2 }}>
+                            {t('pricingLongContext').replace('{n}', `${Math.round(lc.overPromptTokens / 1000)}K`)}
+                          </td>
+                          <td style={pricingTdStyle}>{formatPerMTok(lc.input)}</td>
+                          <td style={pricingTdStyle}>{formatPerMTok(lc.output)}</td>
+                          <td style={pricingTdStyle}>{formatPerMTok(lc.cacheWrite5m)}</td>
+                          <td style={pricingTdStyle}>{formatPerMTok(lc.cacheWrite1h)}</td>
+                          <td style={pricingTdStyle}>{formatPerMTok(lc.cacheRead)}</td>
+                        </tr>,
+                      )
+                    }
+                    return rows
+                  })}
                 </tbody>
               </table>
             </div>
@@ -522,7 +540,10 @@ export function SettingsView({ onSettingsChange }: Props) {
 }
 
 function formatPerMTok(perToken: number): string {
-  return `$${(perToken * 1_000_000).toFixed(2)}`
+  const perMTok = perToken * 1_000_000
+  // $0.125 や $0.01 のような安いモデルの単価を丸めて潰さない
+  const digits = Math.abs(perMTok * 100 - Math.round(perMTok * 100)) > 1e-6 ? 3 : 2
+  return `$${perMTok.toFixed(digits)}`
 }
 
 function pricingSourceText(source: PricingCatalogSnapshot['status']['source'], t: ReturnType<typeof useT>): string {

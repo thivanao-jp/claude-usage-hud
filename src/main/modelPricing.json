@@ -3,7 +3,7 @@
     "schemaVersion": 1,
     "source": "https://platform.claude.com/docs/en/about-claude/pricing",
     "updatedAt": "2026-11-10",
-    "note": "モデルIDは最長の前方一致で照合。各値は標準ルーティングの USD/token。未知バージョンは familyFallbacks の同系列モデルで概算し、API診断にフォールバック使用を明示する。Fable 5.2 / Mythos 5.2 / Fable 5.1 / Mythos 5.1 はキャッシュ読み込みが標準倍率(0.1x)ではなく0.025x、Opus 5.5 / Sonnet 5.5 は0.05xの専用倍率。Haiku 5.5 はプロンプト10万トークン以下の単価を載せている（超えると5倍。この表は段階料金を持てないため概算）。"
+    "note": "モデルIDは最長の前方一致で照合。各値は標準ルーティングの USD/token。未知バージョンは familyFallbacks の同系列モデルで概算し、API診断にフォールバック使用を明示する。Fable 5.2 / Mythos 5.2 / Fable 5.1 / Mythos 5.1 はキャッシュ読み込みが標準倍率(0.1x)ではなく0.025x、Opus 5.5 / Sonnet 5.5 は0.05xの専用倍率。Haiku 5.5 はプロンプト（キャッシュ含む全入力）が10万トークンを超えたリクエストに longContext の単価を使う（v1.2.5以降。旧版は基本単価のまま）。"
   },
   "familyFallbacks": {
     "opus": "claude-opus-5-5",
@@ -179,7 +179,15 @@
       "out": 5e-07,
       "cw5m": 1.25e-07,
       "cw1h": 2e-07,
-      "cr": 1e-08
+      "cr": 1e-08,
+      "longContext": {
+        "overPromptTokens": 100000,
+        "in": 5e-07,
+        "out": 2.5e-06,
+        "cw5m": 6.25e-07,
+        "cw1h": 1e-06,
+        "cr": 5e-08
+      }
     },
     "claude-haiku-4-5": {
       "in": 1e-06,

@@ -150,6 +150,7 @@ const en = {
   pricingColCacheWrite1h: 'Cache Write (1h)',
   pricingColCacheRead:   'Cache Read',
   pricingPerMTok:        '/MTok',
+  pricingLongContext:    '  └ prompt > {n}',
 
   // ---- Beta Providers ----
   sectionBeta:             'Beta Providers (Experimental)',
@@ -312,6 +313,7 @@ const ja = {
   pricingColCacheWrite1h: 'キャッシュ書込(1時間)',
   pricingColCacheRead:   'キャッシュ読込',
   pricingPerMTok:        '/MTok',
+  pricingLongContext:    '  └ プロンプト{n}超',
 
   // ---- Beta Providers ----
   sectionBeta:             'β プロバイダー (試験的)',

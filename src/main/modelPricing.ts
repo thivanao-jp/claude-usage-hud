@@ -9,14 +9,30 @@ export interface ModelPrice {
   cacheWrite5m: number // $ per token (5分キャッシュ書き込み)
   cacheWrite1h: number // $ per token (1時間キャッシュ書き込み)
   cacheRead: number    // $ per token (キャッシュ読み込み)
+  /** プロンプトが閾値を超えたリクエストに適用する単価（例: Haiku 5.5 は10万トークン超で5倍） */
+  longContext?: ModelPriceTier
 }
 
-interface RawPrice {
+export interface ModelPriceTier {
+  overPromptTokens: number
+  input: number
+  output: number
+  cacheWrite5m: number
+  cacheWrite1h: number
+  cacheRead: number
+}
+
+interface RawPriceValues {
   in: number
   out: number
   cw5m: number
   cw1h: number
   cr: number
+}
+
+interface RawPrice extends RawPriceValues {
+  // 旧バージョンのアプリはこのフィールドを無視して基本単価で計算する（後方互換）
+  longContext?: RawPriceValues & { overPromptTokens: number }
 }
 
 interface PricingCatalog {
@@ -59,11 +75,20 @@ function isFinitePrice(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value < 1
 }
 
-function validateRawPrice(value: unknown): value is RawPrice {
+function validateRawPriceValues(value: unknown): value is RawPriceValues {
   if (!value || typeof value !== 'object') return false
   const p = value as Record<string, unknown>
   return isFinitePrice(p.in) && isFinitePrice(p.out) && isFinitePrice(p.cw5m)
     && isFinitePrice(p.cw1h) && isFinitePrice(p.cr)
+}
+
+function validateRawPrice(value: unknown): value is RawPrice {
+  if (!validateRawPriceValues(value)) return false
+  const tier = (value as unknown as Record<string, unknown>).longContext
+  if (tier === undefined) return true
+  if (!validateRawPriceValues(tier)) return false
+  const threshold = (tier as unknown as Record<string, unknown>).overPromptTokens
+  return typeof threshold === 'number' && Number.isInteger(threshold) && threshold > 0
 }
 
 function validateCatalog(value: unknown): PricingCatalog | null {
@@ -110,7 +135,15 @@ let catalogStatus: PricingCatalogStatus = {
 let pricingEntries: { prefix: string; price: ModelPrice }[] = []
 
 function rawToPrice(p: RawPrice): ModelPrice {
-  return { input: p.in, output: p.out, cacheWrite5m: p.cw5m, cacheWrite1h: p.cw1h, cacheRead: p.cr }
+  const price: ModelPrice = { input: p.in, output: p.out, cacheWrite5m: p.cw5m, cacheWrite1h: p.cw1h, cacheRead: p.cr }
+  if (p.longContext) {
+    const t = p.longContext
+    price.longContext = {
+      overPromptTokens: t.overPromptTokens,
+      input: t.in, output: t.out, cacheWrite5m: t.cw5m, cacheWrite1h: t.cw1h, cacheRead: t.cr,
+    }
+  }
+  return price
 }
 
 function activateCatalog(catalog: PricingCatalog, source: PricingCatalogStatus['source']): void {
@@ -244,11 +277,13 @@ export function getModelPrice(model: string | undefined | null): ModelPrice | nu
  */
 export function calcPaceCost(usage: Record<string, unknown>, model: string | undefined | null): PaceCostResult {
   const resolution = resolveModelPrice(model)
-  const price = resolution.price
-  if (!price) return { usd: 0, resolution }
+  const basePrice = resolution.price
+  if (!basePrice) return { usd: 0, resolution }
 
   const inputTokens = Number(usage['input_tokens'] ?? 0)
   const outputTokens = Number(usage['output_tokens'] ?? 0)
+  const cacheReadTokens = Number(usage['cache_read_input_tokens'] ?? 0)
+  const cacheCreationTokens = Number(usage['cache_creation_input_tokens'] ?? 0)
 
   const cacheCreation = usage['cache_creation'] as Record<string, unknown> | undefined
   let ephemeral5m = 0
@@ -257,8 +292,14 @@ export function calcPaceCost(usage: Record<string, unknown>, model: string | und
     ephemeral5m = Number(cacheCreation['ephemeral_5m_input_tokens'] ?? 0)
     ephemeral1h = Number(cacheCreation['ephemeral_1h_input_tokens'] ?? 0)
   } else {
-    ephemeral5m = Number(usage['cache_creation_input_tokens'] ?? 0)
+    ephemeral5m = cacheCreationTokens
   }
+
+  // プロンプト長はキャッシュ読み込み・書き込みを含む全入力トークン（料金ページの定義）。
+  // リクエストごとに判定し、閾値を超えたら全カテゴリを高い単価で計算する。
+  const promptTokens = inputTokens + cacheReadTokens + Math.max(cacheCreationTokens, ephemeral5m + ephemeral1h)
+  const tier = basePrice.longContext
+  const price = tier && promptTokens > tier.overPromptTokens ? tier : basePrice
 
   const usd = inputTokens * price.input
     + outputTokens * price.output
