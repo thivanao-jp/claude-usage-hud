@@ -44,6 +44,27 @@ describe('model pricing', () => {
     expect(resolution.matchedPrefix).toBe('claude-fable-5-1')
   })
 
+  it('prices the 2026-11 models (Fable/Mythos 5.2, Sonnet 5.5, Haiku 5.5) with their own entries', () => {
+    const fable52 = resolveModelPrice('claude-fable-5-2')
+    expect(fable52.matchedPrefix).toBe('claude-fable-5-2')
+    expect(fable52.price?.input).toBeCloseTo(8e-6, 12)
+    expect(fable52.price?.cacheRead).toBeCloseTo(0.2e-6, 12)
+    expect(resolveModelPrice('claude-mythos-5-2').matchedPrefix).toBe('claude-mythos-5-2')
+    const sonnet55 = resolveModelPrice('claude-sonnet-5-5')
+    expect(sonnet55.matchedPrefix).toBe('claude-sonnet-5-5')
+    expect(sonnet55.price?.cacheRead).toBeCloseTo(0.1e-6, 12)
+    const haiku55 = resolveModelPrice('claude-haiku-5-5')
+    expect(haiku55.matchedPrefix).toBe('claude-haiku-5-5')
+    expect(haiku55.price?.output).toBeCloseTo(0.5e-6, 12)
+  })
+
+  it('does not let claude-fable-5-2 swallow a dated Fable 5 id', () => {
+    expect(resolveModelPrice('claude-fable-5-20260601').matchedPrefix).toBe('claude-fable-5')
+    expect(resolveModelPrice('claude-fable-5-2-20261101').matchedPrefix).toBe('claude-fable-5-2')
+    expect(resolveModelPrice('claude-sonnet-5-20260801').matchedPrefix).toBe('claude-sonnet-5')
+    expect(resolveModelPrice('claude-opus-4-6[1m]').matchedPrefix).toBe('claude-opus-4-6')
+  })
+
   it('uses an explicit family fallback instead of silently returning zero', () => {
     const resolution = resolveModelPrice('claude-opus-6-preview')
     expect(resolution.match).toBe('family-fallback')
