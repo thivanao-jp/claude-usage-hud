@@ -1,3 +1,4 @@
+import type { DisplayLayout } from './displayLayouts'
 import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
@@ -37,6 +38,8 @@ export interface Settings {
     detailX?: number
     detailY?: number
     ultraPosition?: UltraPosition
+    /** ディスプレイの接続構成ごとの表示モード・位置（キーは displaySignature） */
+    layouts?: Record<string, DisplayLayout>
   }
   alerts: Record<string, number | undefined> & {
     five_hour?: number
