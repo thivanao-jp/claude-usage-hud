@@ -51,6 +51,12 @@ contextBridge.exposeInMainWorld('api', {
   getBetaData: () => ipcRenderer.invoke('get-beta-data'),
   getCopilotLoginStatus: () => ipcRenderer.invoke('get-copilot-login-status'),
   getCodexLoginStatus: () => ipcRenderer.invoke('get-codex-login-status'),
+  getCodexAuthState: () => ipcRenderer.invoke('get-codex-auth-state'),
+  onCodexAuthStateChanged: (cb: (state: unknown) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, state: unknown) => cb(state)
+    ipcRenderer.on('codex-auth-state-changed', listener)
+    return () => ipcRenderer.removeListener('codex-auth-state-changed', listener)
+  },
   showCopilotLoginWindow: () => ipcRenderer.invoke('show-copilot-login-window'),
   hideCopilotLoginWindow: () => ipcRenderer.invoke('hide-copilot-login-window'),
   showCodexLoginWindow: () => ipcRenderer.invoke('show-codex-login-window'),

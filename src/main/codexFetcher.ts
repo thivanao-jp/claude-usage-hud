@@ -2,6 +2,8 @@ import { app, shell } from 'electron'
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { createInterface } from 'readline'
 import type { CodexPaceData } from './codexPaceMeter'
+import { codexCommand, CodexCliNotFoundError } from './codexCommand'
+import type { CodexAuthState, CodexLoginErrorCode, CodexLoginStatus } from '../shared/codexAuth'
 
 export interface CodexUsageData {
   used: number
@@ -23,9 +25,9 @@ export interface CodexUsageData {
   rateLimitResetCreditsAvailable: number | null
 }
 
-export type CodexLoginStatus = 'logged-in' | 'logged-out' | 'unknown'
+export type { CodexLoginStatus } from '../shared/codexAuth'
 
-type JsonRpcResponse = { id?: number; result?: unknown; error?: { message?: string } }
+type JsonRpcResponse = { id?: number; result?: unknown; error?: { message?: string }; method?: string; params?: { loginId?: string; success?: boolean; error?: string } }
 
 /**
  * Codex CLI App Server の公開 JSON-RPC API を使って ChatGPT の利用枠を読む。
@@ -43,51 +45,65 @@ export class CodexFetcher {
   private loginStatus: CodexLoginStatus = 'unknown'
   private logCallback: ((...args: unknown[]) => void) | null = null
   private statusChangeCallback: ((status: CodexLoginStatus) => void) | null = null
+  private authState: CodexAuthState = { status: 'unknown', phase: 'idle', error: null }
+  private authChangeCallback: ((state: CodexAuthState) => void) | null = null
+  private loginId: string | null = null
+  private authUrl: string | null = null
+  private loginAttempt: Promise<CodexAuthState> | null = null
 
   setLogCallback(cb: (...args: unknown[]) => void): void { this.logCallback = cb }
   setStatusChangeCallback(cb: (status: CodexLoginStatus) => void): void { this.statusChangeCallback = cb }
   getLoginStatus(): CodexLoginStatus { return this.loginStatus }
+  getAuthState(): CodexAuthState { return this.authState }
+  setAuthChangeCallback(cb: (state: CodexAuthState) => void): void { this.authChangeCallback = cb }
   private log(...args: unknown[]): void { this.logCallback?.(...args) }
+
+  private updateAuth(update: Partial<CodexAuthState>): void {
+    this.authState = { ...this.authState, ...update, status: this.loginStatus }
+    this.authChangeCallback?.(this.authState)
+  }
+
+  private loginFailed(code: CodexLoginErrorCode, error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error)
+    this.log('codex login error:', message)
+    this.loginId = null
+    this.authUrl = null
+    this.setStatus('logged-out')
+    this.updateAuth({ phase: 'error', error: { code, message } })
+  }
 
   private setStatus(status: CodexLoginStatus): void {
     if (this.loginStatus !== status) {
       this.loginStatus = status
       this.statusChangeCallback?.(status)
+      this.updateAuth({})
     }
-  }
-
-  private executable(): string {
-    // npm installs the Windows CLI as codex.cmd.  Unlike POSIX executables,
-    // command shims need to be launched through cmd.exe.
-    return process.env.CODEX_BIN || (process.platform === 'win32' ? 'codex.cmd' : 'codex')
   }
 
   private async ensureServer(): Promise<void> {
     if (this.ready) return this.ready
 
     this.ready = new Promise<void>((resolve, reject) => {
-      const inheritedPath = process.env.PATH ?? ''
-      // Keep Windows' semicolon-delimited PATH intact.  Rebuilding it with
-      // ':' prevented Windows from resolving codex.cmd at all.
-      const path = process.platform === 'win32'
-        ? inheritedPath
-        : ['/opt/homebrew/bin', '/usr/local/bin', inheritedPath].filter(Boolean).join(':')
-      const proc = spawn(this.executable(), ['app-server'], {
+      const command = codexCommand()
+      const proc = spawn(command.command, command.args, {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, PATH: path },
-        // codex.cmd is the standard npm shim on Windows; cmd.exe also handles
-        // a user-specified executable or command name through CODEX_BIN.
-        shell: process.platform === 'win32',
+        env: command.env,
+        windowsVerbatimArguments: command.windowsVerbatimArguments,
+        windowsHide: true,
       })
       this.proc = proc
       const rl = createInterface({ input: proc.stdout })
       let initialized = false
 
       const fail = (error: Error): void => {
+        if (this.proc !== proc) return
         if (!initialized) reject(error)
         this.rejectPending(error)
         this.proc = null
         this.ready = null
+        rl.close()
+        if (!proc.killed) proc.kill()
+        if (this.authState.phase === 'waiting') this.loginFailed('server', error)
       }
 
       proc.once('error', (error) => fail(new Error(`Codex CLI could not start: ${error.message}`)))
@@ -95,22 +111,39 @@ export class CodexFetcher {
         if (!proc.killed) fail(new Error(`Codex App Server exited (${code ?? signal ?? 'unknown'})`))
       })
       proc.stderr.on('data', (data) => this.log('codex app-server:', String(data).trim()))
+      proc.stdin.on('error', error => fail(new Error(`Codex App Server input error: ${error.message}`)))
       rl.on('line', (line) => this.handleMessage(line))
 
       this.requestRaw('initialize', {
         clientInfo: { name: 'claude_usage_hud', title: 'Claude Usage HUD', version: app.getVersion() },
       }).then(() => {
-        initialized = true
         this.send({ method: 'initialized', params: {} })
+        initialized = true
         resolve()
       }).catch(fail)
     })
-    return this.ready
+    const ready = this.ready
+    try { await ready } catch (error) {
+      if (this.ready === ready) this.ready = null
+      throw error
+    }
   }
 
   private handleMessage(line: string): void {
     let message: JsonRpcResponse
     try { message = JSON.parse(line) as JsonRpcResponse } catch { return }
+    if (!message || typeof message !== 'object') return
+    if (message.method === 'account/login/completed' && this.loginId && message.params?.loginId === this.loginId) {
+      if (message.params.success === true) {
+        this.loginId = null
+        this.authUrl = null
+        this.setStatus('logged-in')
+        this.updateAuth({ phase: 'complete', error: null })
+      } else {
+        this.loginFailed('login', new Error(message.params.error || 'Codex login did not complete'))
+      }
+      return
+    }
     if (typeof message.id !== 'number') return
     const pending = this.pending.get(message.id)
     if (!pending) return
@@ -166,7 +199,7 @@ export class CodexFetcher {
       this.setStatus(parsed ? 'logged-in' : 'unknown')
       return parsed
     } catch (error) {
-      this.log('codex app-server fetch error:', error)
+      this.log('codex app-server fetch error:', error instanceof Error ? error.message : String(error))
       return null
     }
   }
@@ -252,17 +285,35 @@ export class CodexFetcher {
     return `${minutes}m`
   }
 
-  async showLoginWindow(): Promise<void> {
+  showLoginWindow(): Promise<CodexAuthState> {
+    if (this.loginAttempt) return this.loginAttempt
+    const attempt = this.startLogin()
+    this.loginAttempt = attempt
+    void attempt.finally(() => { if (this.loginAttempt === attempt) this.loginAttempt = null })
+    return attempt
+  }
+
+  private async startLogin(): Promise<CodexAuthState> {
+    let stage: CodexLoginErrorCode = 'server'
+    this.updateAuth({ phase: 'starting', error: null })
     try {
-      const result = await this.request('account/login/start', {
-        type: 'chatgpt', useHostedLoginSuccessPage: true, appBrand: 'chatgpt',
-      }) as { authUrl?: string }
-      if (result.authUrl) await shell.openExternal(result.authUrl)
-      else throw new Error('Codex App Server did not return an authentication URL')
+      if (!this.authUrl) {
+        const result = await this.request('account/login/start', {
+          type: 'chatgpt', useHostedLoginSuccessPage: true, appBrand: 'chatgpt',
+        }) as { authUrl?: string; loginId?: string }
+        if (!result.authUrl || !result.loginId) throw new Error('Codex App Server did not return a login ID and authentication URL')
+        if (new URL(result.authUrl).protocol !== 'https:') throw new Error('Codex App Server returned an invalid authentication URL')
+        this.authUrl = result.authUrl
+        this.loginId = result.loginId
+      }
+      stage = 'browser'
+      await shell.openExternal(this.authUrl)
+      // Completion may arrive while the browser is opening.
+      if (this.loginId) this.updateAuth({ phase: 'waiting', error: null })
     } catch (error) {
-      this.log('codex login error:', error)
-      this.setStatus('logged-out')
+      this.loginFailed(error instanceof CodexCliNotFoundError || (error as NodeJS.ErrnoException)?.code === 'ENOENT' ? 'cli-not-found' : stage, error)
     }
+    return this.authState
   }
 
   hideLoginWindow(): void { /* Login is handled by the system browser. */ }
