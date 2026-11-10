@@ -65,7 +65,7 @@ const LOG_PATH = join(LOG_DIR, 'claude-usage-hud.log')
 const LOG_MAX_BYTES = 5 * 1024 * 1024 // 5MB を超えたら起動時にローテーション
 try { mkdirSync(LOG_DIR, { recursive: true }) } catch {}
 function log(...args: unknown[]): void {
-  const line = `[${new Date().toISOString()}] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}\n`
+  const line = `[${new Date().toISOString()}] ${args.map(a => a instanceof Error ? `${a.name}: ${a.message}` : typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}\n`
   try { appendFileSync(LOG_PATH, line) } catch {}
   console.log(...args)
 }
@@ -911,6 +911,7 @@ ipcMain.handle('get-beta-data', () => lastBeta)
 ipcMain.handle('get-cc-pace-data', () => lastCcPace)
 ipcMain.handle('get-copilot-login-status', () => copilotFetcher.getLoginStatus())
 ipcMain.handle('get-codex-login-status', () => codexFetcher.getLoginStatus())
+ipcMain.handle('get-codex-auth-state', () => codexFetcher.getAuthState())
 ipcMain.handle('show-copilot-login-window', () => copilotFetcher.showLoginWindow())
 ipcMain.handle('hide-copilot-login-window', () => copilotFetcher.hideLoginWindow())
 ipcMain.handle('show-codex-login-window', () => codexFetcher.showLoginWindow())
@@ -1334,6 +1335,13 @@ if (!gotTheLock) {
     })
     codexFetcher.setStatusChangeCallback((status) => {
       log('codex login status changed:', status)
+    })
+    let previousCodexPhase = codexFetcher.getAuthState().phase
+    codexFetcher.setAuthChangeCallback(state => {
+      settingsWindow?.webContents.send('codex-auth-state-changed', state)
+      const completed = state.phase === 'complete' && previousCodexPhase !== 'complete'
+      previousCodexPhase = state.phase
+      if (completed) void doUpdateBeta()
     })
 
     // 起動時にキャッシュ済み orgUuid を復元

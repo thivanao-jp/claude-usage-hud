@@ -5,6 +5,8 @@ import { useLang } from '../LangContext'
 import { useTheme } from '../ThemeContext'
 import { WEEKLY_FIELD_DEFS } from '../fieldDefs'
 import { DEFAULT_CREDIT_GAUGE_MAX } from '../codexCredits'
+import type { CodexAuthState, CodexLoginErrorCode } from '../../../shared/codexAuth'
+import type { TranslationKey } from '../i18n'
 
 type ProviderStatus = 'logged-in' | 'logged-out' | 'unknown'
 
@@ -51,7 +53,7 @@ export function SettingsView({ onSettingsChange }: Props) {
   const [appVersion, setAppVersion] = useState('')
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' })
   const [copilotStatus, setCopilotStatus] = useState<ProviderStatus>('unknown')
-  const [codexStatus, setCodexStatus] = useState<ProviderStatus>('unknown')
+  const [codexAuth, setCodexAuth] = useState<CodexAuthState>({ status: 'unknown', phase: 'idle', error: null })
   const [pricingCatalog, setPricingCatalog] = useState<PricingCatalogSnapshot | null>(null)
   const [pricingRefreshing, setPricingRefreshing] = useState(false)
 
@@ -61,13 +63,27 @@ export function SettingsView({ onSettingsChange }: Props) {
     window.api.getUsage().then(r => setCurrentUsage(r.usage))
     window.api.getAppVersion().then(setAppVersion)
     window.api.getCopilotLoginStatus().then(setCopilotStatus)
-    window.api.getCodexLoginStatus().then(setCodexStatus)
+    window.api.getCodexAuthState().then(setCodexAuth)
     window.api.getPricingCatalog().then(setPricingCatalog)
     const offLogin = window.api.onLoginStatusChanged(status => setLoginStatus(status))
     const offUpdate = window.api.onUpdateStatus(status => setUpdateStatus(status as UpdateStatus))
     const offPricing = window.api.onPricingCatalogUpdated(snapshot => setPricingCatalog(snapshot))
-    return () => { offLogin(); offUpdate(); offPricing() }
+    const offCodex = window.api.onCodexAuthStateChanged(setCodexAuth)
+    return () => { offLogin(); offUpdate(); offPricing(); offCodex() }
   }, [])
+
+  async function handleCodexLogin() {
+    setCodexAuth(state => ({ ...state, phase: 'starting', error: null }))
+    try {
+      setCodexAuth(await window.api.showCodexLoginWindow())
+    } catch {
+      setCodexAuth(state => ({ ...state, phase: 'error', error: { code: 'server', message: '' } }))
+    }
+  }
+
+  const codexErrorKeys: Record<CodexLoginErrorCode, TranslationKey> = {
+    'cli-not-found': 'codexCliNotFound', server: 'codexServerError', browser: 'codexBrowserError', login: 'codexLoginError',
+  }
 
   async function handleRefreshPricing() {
     setPricingRefreshing(true)
@@ -168,10 +184,17 @@ export function SettingsView({ onSettingsChange }: Props) {
           <div style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, marginBottom: 6 }}>OpenAI Codex</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <CheckRow label={t('betaCodexLabel')} checked={s.codex?.enabled ?? false} onChange={v => upd(p => ({ ...p, codex: { ...p.codex, enabled: v } }))} th={th} />
-            <StatusDot status={codexStatus} t={t} />
-            <button onClick={() => window.api.showCodexLoginWindow()} style={{ ...secondaryBtn, marginLeft: 'auto', fontSize: 11 }}>{t('betaLoginBtn')}</button>
+            <StatusDot status={codexAuth.status} t={t} />
+            <button disabled={codexAuth.phase === 'starting'} onClick={handleCodexLogin} style={{ ...secondaryBtn, marginLeft: 'auto', fontSize: 11 }}>
+              {t(codexAuth.phase === 'starting' ? 'codexLoginStarting' : codexAuth.phase === 'waiting' ? 'codexReopenBrowser' : 'betaLoginBtn')}
+            </button>
           </div>
           <div style={{ fontSize: 11, color: th.textFaint2, paddingLeft: 20 }}>{t('betaCodexDesc')}</div>
+          {codexAuth.phase === 'waiting' && <div role="status" style={{ fontSize: 12, color: th.textSub, marginTop: 8, paddingLeft: 20 }}>{t('codexLoginWaiting')}</div>}
+          {codexAuth.error && <div role="alert" style={{ fontSize: 12, color: '#e57373', marginTop: 8, paddingLeft: 20 }}>
+            <div>{t(codexErrorKeys[codexAuth.error.code])}</div>
+            {codexAuth.error.message && <div style={{ fontSize: 11, marginTop: 4, overflowWrap: 'anywhere', userSelect: 'text' }}>{codexAuth.error.message}</div>}
+          </div>}
         </div>
 
         <div style={{ borderTop: `1px solid ${th.borderSection}`, marginTop: 12, paddingTop: 12 }}>

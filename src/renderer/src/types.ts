@@ -260,7 +260,9 @@ declare global {
       getCodexLoginStatus: () => Promise<'logged-in' | 'logged-out' | 'unknown'>
       showCopilotLoginWindow: () => Promise<void>
       hideCopilotLoginWindow: () => Promise<void>
-      showCodexLoginWindow: () => Promise<void>
+      getCodexAuthState: () => Promise<import('../../shared/codexAuth').CodexAuthState>
+      onCodexAuthStateChanged: (cb: (state: import('../../shared/codexAuth').CodexAuthState) => void) => () => void
+      showCodexLoginWindow: () => Promise<import('../../shared/codexAuth').CodexAuthState>
       hideCodexLoginWindow: () => Promise<void>
       // Debug only: sets arbitrary usage/beta/ccPace values for local testing & screenshots.
       // No-ops (returns { ok: false }) in packaged builds.
