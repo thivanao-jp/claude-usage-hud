@@ -28,6 +28,7 @@ import { pollCcUsage, getCcPaceData, getBootstrapEstimate, CcPaceData, HistoryPo
 import { calculateCodexPace } from './codexPaceMeter'
 import { getPricingCatalogSnapshot, initializeModelPricing } from './modelPricing'
 import { buildLocalUsagePayload } from './localUsagePayload'
+import { displaySignature, findDisplayByOrigin, fitIntoWorkArea, upsertLayout, type DisplayInfo } from './displayLayouts'
 
 // ---- Screenshot / Debug Mock Mode ----
 // README用スクリーンショット生成のための開発専用モード。パッケージ済みアプリでは絶対に有効化されない。
@@ -104,11 +105,56 @@ function centerOnActiveDisplay(w: number, h: number): { x: number; y: number } {
   }
 }
 
-function isPositionOnSomeDisplay(x: number, y: number): boolean {
-  return screen.getAllDisplays().some(d => {
-    const b = d.workArea
-    return x >= b.x && x < b.x + b.width && y >= b.y && y < b.y + b.height
+function getDisplayInfos(): DisplayInfo[] {
+  return screen.getAllDisplays().map(d => ({ bounds: d.bounds, workArea: d.workArea, scaleFactor: d.scaleFactor }))
+}
+
+function describeDisplays(displays: DisplayInfo[]): string {
+  return displays.map(d => {
+    const b = d.bounds, w = d.workArea
+    return `[${b.x},${b.y} ${b.width}x${b.height} @${d.scaleFactor}x work ${w.x},${w.y} ${w.width}x${w.height}]`
+  }).join(' ')
+}
+
+function describeHudWindow(): string {
+  if (!hudWindow || hudWindow.isDestroyed()) return 'hud=none'
+  const b = hudWindow.getBounds()
+  return `hud=${b.x},${b.y} ${b.width}x${b.height} visible=${hudWindow.isVisible()} minimized=${hudWindow.isMinimized()}`
+}
+
+// ディスプレイ構成が変わってから配置し直すまでの間は、OSが動かしたウィンドウ位置を記憶しない
+let displayChangePending = false
+let displayChangeTimer: ReturnType<typeof setTimeout> | null = null
+let lastDisplaySignature: string | null = null
+
+/** 今の表示モード・位置を、今のディスプレイ構成の配置として記憶する（settings を書き換えるだけで保存はしない） */
+function rememberLayout(s: Settings): void {
+  const displays = getDisplayInfos()
+  let ultraDisplay = s.window.layouts?.[displaySignature(displays)]?.ultraDisplay
+  if (s.viewMode === 'ultra' && hudWindow && !hudWindow.isDestroyed()) {
+    const d = screen.getDisplayMatching(hudWindow.getBounds())
+    ultraDisplay = { x: d.bounds.x, y: d.bounds.y }
+  }
+  s.window.layouts = upsertLayout(s.window.layouts, displaySignature(displays), {
+    viewMode: s.viewMode,
+    compactX: s.window.compactX,
+    compactY: s.window.compactY,
+    detailX: s.window.detailX,
+    detailY: s.window.detailY,
+    ultraPosition: s.window.ultraPosition,
+    ultraDisplay,
   })
+}
+
+/** 記憶した配置を settings に戻す。戻した場合は Ultra を置くディスプレイの左上を返す */
+function restoreLayout(s: Settings, signature: string): { restored: boolean; ultraDisplay?: { x: number; y: number } } {
+  const layout = s.window.layouts?.[signature]
+  if (!layout) return { restored: false }
+  s.viewMode = layout.viewMode
+  if (layout.compactX != null && layout.compactY != null) { s.window.compactX = layout.compactX; s.window.compactY = layout.compactY }
+  if (layout.detailX != null && layout.detailY != null) { s.window.detailX = layout.detailX; s.window.detailY = layout.detailY }
+  if (layout.ultraPosition) s.window.ultraPosition = layout.ultraPosition
+  return { restored: true, ultraDisplay: layout.ultraDisplay }
 }
 
 // ---- Window Size ----
@@ -184,9 +230,11 @@ function getWindowSize(mode: ViewMode, settings: Settings, usage?: UsageData | n
   return { w: DETAIL_W, h: getDetailHeight(settings, beta) }
 }
 
-function getUltraSnapPosition(pos: UltraPosition, w: number, existingWin?: BrowserWindow | null): { x: number; y: number } {
+function getUltraSnapPosition(pos: UltraPosition, w: number, existingWin?: BrowserWindow | null, preferWorkArea?: Electron.Rectangle): { x: number; y: number } {
   let bounds: Electron.Rectangle
-  if (existingWin && !existingWin.isDestroyed()) {
+  if (preferWorkArea) {
+    bounds = preferWorkArea
+  } else if (existingWin && !existingWin.isDestroyed()) {
     const [wx, wy] = existingWin.getPosition()
     const [ww, wh] = existingWin.getSize()
     bounds = screen.getDisplayNearestPoint({ x: wx + Math.round(ww / 2), y: wy + Math.round(wh / 2) }).workArea
@@ -205,15 +253,17 @@ function getUltraSnapPosition(pos: UltraPosition, w: number, existingWin?: Brows
 
 // ---- HUD Window ----
 
-function getSavedPosition(mode: ViewMode, settings: Settings): { x: number; y: number } | null {
+function getSavedPosition(mode: ViewMode, settings: Settings, w: number, h: number): { x: number; y: number } | null {
   const cx = mode === 'compact' ? settings.window.compactX : settings.window.detailX
   const cy = mode === 'compact' ? settings.window.compactY : settings.window.detailY
-  if (cx != null && cy != null && isPositionOnSomeDisplay(cx, cy)) return { x: cx, y: cy }
-  return null
+  if (cx == null || cy == null) return null
+  // ウィンドウ全体が画面内に入るように寄せる（左上の1点だけで判定すると大半が画面外でも採用されてしまう）
+  return fitIntoWorkArea({ x: cx, y: cy, width: w, height: h }, getDisplayInfos())
 }
 
 function saveWindowPosition(mode: ViewMode, px: number, py: number): void {
   if (mode === 'ultra') return  // ultra position is managed by snap, not drag
+  if (displayChangePending) return  // 構成変更でOSが動かした位置は記憶しない
   const s = loadSettings()
   if (mode === 'compact') {
     s.window.compactX = px
@@ -222,19 +272,27 @@ function saveWindowPosition(mode: ViewMode, px: number, py: number): void {
     s.window.detailX = px
     s.window.detailY = py
   }
+  rememberLayout(s)
   saveSettings(s)
 }
 
 function createHudWindow(): BrowserWindow {
   const settings = loadSettings()
+  const displays = getDisplayInfos()
+  const signature = displaySignature(displays)
+  lastDisplaySignature = signature
+  const restored = restoreLayout(settings, signature)
+  if (restored.restored) saveSettings(settings)
+  log('createHudWindow: displays', describeDisplays(displays), 'layout', restored.restored ? 'restored' : 'none', 'mode', settings.viewMode)
   const mode = settings.viewMode
   const { w, h } = getWindowSize(mode, settings)
 
   let pos: { x: number; y: number }
   if (mode === 'ultra') {
-    pos = getUltraSnapPosition(settings.window.ultraPosition ?? 'top-right', w)
+    const target = findDisplayByOrigin(displays, restored.ultraDisplay)
+    pos = getUltraSnapPosition(settings.window.ultraPosition ?? 'top-right', w, null, target?.workArea)
   } else {
-    pos = getSavedPosition(mode, settings) ?? centerOnActiveDisplay(w, h)
+    pos = getSavedPosition(mode, settings, w, h) ?? centerOnActiveDisplay(w, h)
   }
   const { x, y } = pos
 
@@ -324,6 +382,7 @@ function switchViewMode(mode: ViewMode): void {
   }
 
   s.viewMode = mode
+  rememberLayout(s)
   saveSettings(s)
 
   if (!hudWindow || hudWindow.isDestroyed()) return
@@ -335,22 +394,76 @@ function switchViewMode(mode: ViewMode): void {
   if (mode === 'ultra') {
     pos = getUltraSnapPosition(s.window.ultraPosition ?? 'top-right', w, hudWindow)
   } else {
-    pos = getSavedPosition(mode, s) ?? centerOnActiveDisplay(w, h)
+    pos = getSavedPosition(mode, s, w, h) ?? centerOnActiveDisplay(w, h)
   }
   hudWindow.setPosition(pos.x, pos.y)
+  if (mode === 'ultra') {
+    // Ultra を置いたディスプレイも記憶する（移動後のウィンドウで判定）
+    const after = loadSettings()
+    rememberLayout(after)
+    saveSettings(after)
+  }
 
   hudWindow.webContents.send('mode-changed', mode)
+}
+
+/** ディスプレイの接続・取り外し・解像度変更のあと、記憶した配置に戻すか、画面内に収める */
+function applyDisplayLayout(reason: string): void {
+  if (!hudWindow || hudWindow.isDestroyed()) return
+  const displays = getDisplayInfos()
+  const signature = displaySignature(displays)
+  const s = loadSettings()
+  const changed = signature !== lastDisplaySignature
+  lastDisplaySignature = signature
+  const restored: { restored: boolean; ultraDisplay?: { x: number; y: number } } = changed ? restoreLayout(s, signature) : { restored: false }
+  const before = hudWindow.getBounds()
+  if (restored.restored) saveSettings(s)
+
+  const { w, h } = getWindowSize(s.viewMode, s, lastUsage, lastBeta, lastCcPace)
+  hudWindow.setSize(w, h)
+  let pos: { x: number; y: number }
+  if (s.viewMode === 'ultra') {
+    const target = findDisplayByOrigin(displays, restored.ultraDisplay)
+    pos = getUltraSnapPosition(s.window.ultraPosition ?? 'top-right', w, hudWindow, target?.workArea)
+  } else if (restored.restored) {
+    pos = getSavedPosition(s.viewMode, s, w, h) ?? centerOnActiveDisplay(w, h)
+  } else {
+    // 記憶が無い構成では動かさず、はみ出している時だけ画面内へ寄せる
+    const [cx, cy] = hudWindow.getPosition()
+    pos = fitIntoWorkArea({ x: cx, y: cy, width: w, height: h }, displays)
+  }
+  hudWindow.setPosition(pos.x, pos.y)
+  if (restored.restored) hudWindow.webContents.send('mode-changed', s.viewMode)
+  // 作業領域の小さな変化（Dock・タスクバー）では何も動かないので、ログを増やさない
+  if (!changed && pos.x === before.x && pos.y === before.y && w === before.width && h === before.height) return
+  log(`display change (${reason}): ${changed ? 'new configuration' : 'same configuration'}, layout ${restored.restored ? 'restored' : 'kept'};`, describeDisplays(displays), describeHudWindow())
+}
+
+function onDisplayChanged(reason: string): void {
+  displayChangePending = true
+  if (displayChangeTimer) clearTimeout(displayChangeTimer)
+  // 接続直後は解像度・配置の通知が続けて来るので、落ち着いてからまとめて配置し直す
+  displayChangeTimer = setTimeout(() => {
+    displayChangeTimer = null
+    try {
+      applyDisplayLayout(reason)
+    } finally {
+      // 自分で動かした位置の 'moved' を記憶しないよう、少し待ってから解除する
+      setTimeout(() => { displayChangePending = false }, 500)
+    }
+  }, 1500)
 }
 
 function setUltraPosition(pos: UltraPosition): void {
   const s = loadSettings()
   s.window.ultraPosition = pos
-  saveSettings(s)
   if (hudWindow && !hudWindow.isDestroyed() && s.viewMode === 'ultra') {
     const { w } = getWindowSize('ultra', s)
     const { x, y } = getUltraSnapPosition(pos, w, hudWindow)
     hudWindow.setPosition(x, y)
   }
+  rememberLayout(s)
+  saveSettings(s)
 }
 
 // ---- Tray ----
@@ -735,6 +848,19 @@ ipcMain.handle('get-usage', () => ({ usage: lastUsage, profile: lastProfile }))
 ipcMain.handle('get-history', (_e, days: number) => getUsageHistory(days))
 ipcMain.handle('get-settings', () => loadSettings())
 ipcMain.handle('save-settings', (_e, settings: Settings) => {
+  // 設定画面は開いた時点の設定を丸ごと送ってくる。設定画面で編集しない表示モード・位置・
+  // ディスプレイ構成ごとの配置は、開いている間に変わっていても古い値で上書きしないよう今の値を残す
+  const current = loadSettings()
+  settings.viewMode = current.viewMode
+  settings.window = {
+    ...settings.window,
+    compactX: current.window.compactX,
+    compactY: current.window.compactY,
+    detailX: current.window.detailX,
+    detailY: current.window.detailY,
+    ultraPosition: current.window.ultraPosition,
+    layouts: current.window.layouts,
+  }
   saveSettings(settings)
   app.setLoginItemSettings({
     openAtLogin: settings.launchAtLogin ?? false,
@@ -1174,11 +1300,20 @@ if (!gotTheLock) {
     }
   } catch {}
 
+  // もう一度起動されたら、既に動いている側でHUDを必ず見える状態にする。
+  // ウィンドウが閉じられていたら作り直し、画面外にあれば画面内へ寄せる（以前は閉じた後だと何も起きなかった）
   app.on('second-instance', () => {
-    if (hudWindow && !hudWindow.isDestroyed()) {
-      hudWindow.show()
-      hudWindow.focus()
+    if (!hudWindow || hudWindow.isDestroyed()) {
+      hudWindow = createHudWindow()
+    } else {
+      const b = hudWindow.getBounds()
+      const pos = fitIntoWorkArea(b, getDisplayInfos())
+      if (pos.x !== b.x || pos.y !== b.y) hudWindow.setPosition(pos.x, pos.y)
+      if (hudWindow.isMinimized()) hudWindow.restore()
     }
+    hudWindow.show()
+    hudWindow.focus()
+    log('second-instance: brought HUD to front;', describeHudWindow())
   })
 
   app.whenReady().then(async () => {
@@ -1235,6 +1370,10 @@ if (!gotTheLock) {
     createTray()
     hudWindow = createHudWindow()
     hudWindow.show()
+    log('startup:', describeHudWindow())
+    screen.on('display-added', () => onDisplayChanged('display-added'))
+    screen.on('display-removed', () => onDisplayChanged('display-removed'))
+    screen.on('display-metrics-changed', (_e, _d, changed) => onDisplayChanged(`metrics-changed:${changed.join(',')}`))
     scheduleUpdates()
     scheduleCcPaceUpdates()
     startLocalApiServer()
